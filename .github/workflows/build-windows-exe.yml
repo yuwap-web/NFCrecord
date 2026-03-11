@@ -35,40 +35,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NFCrecord-windows
+          name: NFCrecord-${{ github.run_number }}
           path: dist/NFCrecord.exe
-
-      - name: Create Release
-        uses: actions/create-release@v1
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          body: |
-            # NFC Sheets Logger - Windows Executable
-
-            Built on: ${{ github.event.head_commit.timestamp }}
-
-            ## Download
-
-            Download `NFCrecord.exe` and run it on Windows.
-
-            ## Setup Instructions
-
-            1. Run setup_credentials.py to configure Google Sheets API
-            2. Share your Google Sheets with the service account email
-            3. Run NFCrecord.exe
-          draft: false
-          prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/NFCrecord.exe
-          asset_name: NFCrecord.exe
-          asset_content_type: application/octet-stream
+          retention-days: 30
