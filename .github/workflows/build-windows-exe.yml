@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -39,11 +42,35 @@ jobs:
           path: dist/NFCrecord.exe
           retention-days: 30
 
-      - name: Create Release with GitHub CLI
+      - name: Delete existing release if exists
         run: |
-          gh release create v${{ github.run_number }} `
+          gh release delete "v${{ github.run_number }}" --yes 2>$null
+          exit 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release notes file
+        run: |
+          @"
+          # NFC Sheets Logger - Windows Executable
+
+          Download ``NFCrecord.exe`` and run it on Windows.
+
+          ## Quick Start
+
+          1. Download ``NFCrecord.exe`` below
+          2. Create a ``config`` folder next to the EXE
+          3. Copy ``config.yaml`` and ``credentials.json`` into the ``config`` folder
+          4. Run ``NFCrecord.exe``
+
+          See [Setup Guide](https://github.com/${{ github.repository }}/blob/main/setup/README_SETUP.md) for details.
+          "@ | Out-File -FilePath release_notes.md -Encoding utf8
+
+      - name: Create Release
+        run: |
+          gh release create "v${{ github.run_number }}" `
             --title "Release v${{ github.run_number }}" `
-            --notes "# NFC Sheets Logger - Windows Executable`n`nDownload \`NFCrecord.exe\` and run it on Windows.`n`n## Quick Start`n`n1. Download \`NFCrecord.exe\` below`n2. Create a \`config\` folder next to the EXE`n3. Copy \`config.yaml\` and \`credentials.json\` into the \`config\` folder`n4. Run \`NFCrecord.exe\``n`nSee [Setup Guide](https://github.com/${{ github.repository }}/blob/main/setup/README_SETUP.md) for details." `
+            --notes-file release_notes.md `
             dist/NFCrecord.exe
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
