@@ -1,8 +1,19 @@
 """NFC Reader support for SONY RC-380"""
 
+import sys
+import os
 import threading
 import queue
 from typing import Optional, Callable
+
+# Fix module path for PyInstaller
+if getattr(sys, 'frozen', False):
+    app_dir = os.path.dirname(sys.executable)
+else:
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
 
 try:
     from smartcard.System import readers

@@ -1,9 +1,21 @@
 """Main UI for NFC Sheets Logger using PySimpleGUI"""
 
 import sys
+import os
 import threading
 from pathlib import Path
 from datetime import datetime
+
+# Fix module path for PyInstaller
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe
+    app_dir = os.path.dirname(sys.executable)
+else:
+    # Running as script
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
 
 import PySimpleGUI as sg
 

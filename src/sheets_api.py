@@ -1,9 +1,20 @@
 """Google Sheets API integration for NFC Sheets Logger"""
 
+import sys
+import os
 import threading
 import queue
 from typing import Optional, List
 from datetime import datetime
+
+# Fix module path for PyInstaller
+if getattr(sys, 'frozen', False):
+    app_dir = os.path.dirname(sys.executable)
+else:
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
 
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials

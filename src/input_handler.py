@@ -1,8 +1,19 @@
 """Input handler for Stream Deck and keyboard inputs"""
 
+import sys
+import os
 import threading
 import queue
 from typing import Optional, Callable, Dict
+
+# Fix module path for PyInstaller
+if getattr(sys, 'frozen', False):
+    app_dir = os.path.dirname(sys.executable)
+else:
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
 
 try:
     from streamdeck.DeviceManager import DeviceManager
@@ -90,18 +101,22 @@ class InputHandler:
 
     def register_keyboard_callback(self, callback: Callable) -> None:
         """Register callback for keyboard presses"""
-        if not self._keyboard_initialized:
+        if not self._keyboard_initialized or not HAS_KEYBOARD:
             return
 
         try:
             for key_name, value in self.key_mappings.items():
                 if key_name.isdigit():  # "1", "2", "3"
-                    keyboard.add_hotkey(key_name, callback, args=(value,))
+                    try:
+                        keyboard.add_hotkey(key_name, callback, args=(value,))
+                    except Exception as e:
+                        print(f"⚠ Failed to register key '{key_name}': {e}")
+                        continue
 
-            print("✓ Keyboard hotkeys registered")
+            print("✓ Keyboard hotkeys registered (or partially registered)")
 
         except Exception as e:
-            print(f"Error registering keyboard callback: {e}")
+            print(f"⚠ Error registering keyboard callback: {e}")
 
     def get_status(self) -> Dict[str, str]:
         """Get input devices status"""
