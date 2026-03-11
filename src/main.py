@@ -165,7 +165,17 @@ class NFCLoggerUI:
     def run(self):
         """Main UI event loop"""
         if not self.initialize():
-            sg.popup_error("Failed to initialize. Check configuration.")
+            msg = (
+                f"初期化に失敗しました。\n\n"
+                f"EXE場所: {os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else '(スクリプト実行)'}\n"
+                f"設定ファイル: {config.config_file}\n"
+                f"設定ファイル存在: {config.config_file.exists()}\n"
+                f"認証ファイル: {config.credentials_file}\n"
+                f"認証ファイル存在: {config.credentials_file.exists()}\n"
+                f"spreadsheet_id: {config.get('google_sheets.spreadsheet_id', '(未設定)')}\n\n"
+                f"configフォルダをEXEと同じフォルダに配置してください。"
+            )
+            sg.popup_error(msg, title="設定エラー")
             return
 
         self.window = sg.Window(

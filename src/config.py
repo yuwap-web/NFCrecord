@@ -60,7 +60,13 @@ class Config:
 
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from YAML file or use defaults"""
-        config = self.defaults.copy()
+        import copy
+        config = copy.deepcopy(self.defaults)
+
+        print(f"[Config] Frozen: {getattr(sys, 'frozen', False)}")
+        print(f"[Config] PROJECT_ROOT: {self.project_root}")
+        print(f"[Config] Config file: {self.config_file}")
+        print(f"[Config] Config file exists: {self.config_file.exists()}")
 
         if self.config_file.exists():
             try:
@@ -68,9 +74,12 @@ class Config:
                     user_config = yaml.safe_load(f) or {}
                     # Deep merge user config with defaults
                     self._merge_dicts(config, user_config)
+                    print(f"[Config] Loaded spreadsheet_id: {config.get('google_sheets', {}).get('spreadsheet_id', '(empty)')}")
             except Exception as e:
                 print(f"Warning: Failed to load config file: {e}")
                 print("Using default configuration")
+        else:
+            print(f"[Config] WARNING: config file NOT FOUND at {self.config_file}")
 
         return config
 
