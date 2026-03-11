@@ -29,7 +29,6 @@ jobs:
         run: |
           pyinstaller --onefile `
             --name NFCrecord `
-            --icon=src/assets/icon.ico `
             --add-data "src:src" `
             src/main.py
 
