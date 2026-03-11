@@ -38,3 +38,29 @@ jobs:
           name: NFCrecord-${{ github.run_number }}
           path: dist/NFCrecord.exe
           retention-days: 30
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          files: dist/NFCrecord.exe
+          body: |
+            # NFC Sheets Logger - Windows Executable
+
+            Download `NFCrecord.exe` and run it on Windows.
+
+            **Built at**: ${{ github.event.head_commit.timestamp }}
+
+            ## Quick Start
+
+            1. Download `NFCrecord.exe` below
+            2. Create a `config` folder next to the EXE
+            3. Copy `config.yaml` and `credentials.json` into the `config` folder
+            4. Run `NFCrecord.exe`
+
+            See [Setup Guide](https://github.com/${{ github.repository }}/blob/main/setup/README_SETUP.md) for details.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
