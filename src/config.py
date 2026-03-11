@@ -1,13 +1,20 @@
 """Configuration management for NFC Sheets Logger"""
 
+import sys
 import os
 import json
 import yaml
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Project root directory
-PROJECT_ROOT = Path(__file__).parent.parent
+# Project root directory - handle both script and frozen EXE
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe: look for config/ next to the EXE
+    PROJECT_ROOT = Path(os.path.dirname(sys.executable))
+else:
+    # Running as script: go up from src/ to project root
+    PROJECT_ROOT = Path(__file__).parent.parent
+
 CONFIG_DIR = PROJECT_ROOT / "config"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"

@@ -1,4 +1,4 @@
-"""Main UI for NFC Sheets Logger using PySimpleGUI"""
+"""Main UI for NFC Sheets Logger using FreeSimpleGUI"""
 
 import sys
 import os
@@ -17,14 +17,13 @@ else:
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
-import PySimpleGUI as sg
+import FreeSimpleGUI as sg
 
 from config import config
 from event_processor import EventProcessor
 
-# Configure PySimpleGUI theme
-# Note: sg.theme() is not available in PySimpleGUI 5.x
-# sg.set_options(theme=config.get("gui.theme", "DarkBlue3"))
+# Configure theme
+sg.theme(config.get("gui.theme", "DarkBlue3"))
 
 # Constants
 WINDOW_TITLE = "NFC Sheets Logger"

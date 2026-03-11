@@ -33,6 +33,7 @@ jobs:
           pyinstaller --onefile `
             --name NFCrecord `
             --paths src `
+            --hidden-import FreeSimpleGUI `
             src/main.py
 
       - name: Upload artifact
