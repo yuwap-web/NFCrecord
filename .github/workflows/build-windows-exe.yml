@@ -29,7 +29,7 @@ jobs:
         run: |
           pyinstaller --onefile `
             --name NFCrecord `
-            --add-data "src:src" `
+            --paths src `
             src/main.py
 
       - name: Upload artifact
