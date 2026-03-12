@@ -1,0 +1,25 @@
+google_sheets:
+  spreadsheet_id: "1pD9AKgnxkqVIozlEPZnUOjztdrw2CIqNU1UJc9QcFJM"
+  sheet_name: "NFC Logs"
+  columns:
+    - 日時
+    - 問い合わせ内容
+    - 変更の有無
+    - 備考
+
+nfc:
+  reader_name: "SONY RC-380"
+  poll_interval: 0.5
+
+input:
+  key_mappings:
+    "1": "変更あり"
+    "2": "変更なし"
+    "3": "疑義照会"
+  timeout_seconds: 5
+  default_on_timeout: "変更あり"
+
+gui:
+  window_size: [600, 400]
+  theme: "DarkBlue3"
+  log_lines: 10

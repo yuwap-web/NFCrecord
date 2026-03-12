@@ -71,6 +71,7 @@ class NFCLoggerUI:
         self.window = None
         self._status_message = "起動中..."
         self._pending_uid = None
+        self._show_patient_dialog = False
 
     def initialize(self) -> bool:
         """Initialize the UI and event processor"""
@@ -144,9 +145,13 @@ class NFCLoggerUI:
         content = event_data.get("content")
         change = event_data.get("change")
         nfc_uid = event_data.get("nfc_uid")
+        notes = event_data.get("notes", "")
 
         # Add to log
-        log_entry = f"[{timestamp}] {change} (UID: {nfc_uid[:8]}...)"
+        if notes:
+            log_entry = f"[{timestamp}] {change} / {notes}"
+        else:
+            log_entry = f"[{timestamp}] {change}"
         self.log_entries.insert(0, log_entry)
         self.log_entries = self.log_entries[:LOG_LINES]
 
@@ -155,7 +160,7 @@ class NFCLoggerUI:
     def _on_status_change(self, status: str, uid: str = None):
         """Callback for status changes from event processor"""
         if status == "nfc_detected":
-            self._status_message = "📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし)"
+            self._status_message = "📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし / 3:疑義照会)"
         elif status == "waiting":
             self._status_message = "カード待機中..."
         elif status == "timeout":
@@ -164,6 +169,9 @@ class NFCLoggerUI:
             self._status_message = "⌨ 入力受付 → 記録中..."
         elif status == "wait_removal":
             self._status_message = "✓ 記録完了！ カードを取り外してください"
+        elif status == "waiting_patient_number":
+            self._status_message = "📝 疑義照会 → 患者番号を入力してください"
+            self._show_patient_dialog = True
 
     def update_display(self):
         """Update all GUI elements"""
@@ -181,6 +189,8 @@ class NFCLoggerUI:
                 self.window["-STATUS-"].update(text_color="yellow")
             elif "取り外して" in self._status_message:
                 self.window["-STATUS-"].update(text_color="cyan")
+            elif "患者番号" in self._status_message:
+                self.window["-STATUS-"].update(text_color="yellow")
             elif "タイムアウト" in self._status_message:
                 self.window["-STATUS-"].update(text_color="orange")
             elif "記録中" in self._status_message:
@@ -235,6 +245,18 @@ class NFCLoggerUI:
 
             if event == sg.WINDOW_CLOSED or event == "-EXIT-":
                 break
+
+            # Check if we need to show patient number dialog
+            if self._show_patient_dialog:
+                self._show_patient_dialog = False
+                patient_number = sg.popup_get_text(
+                    "患者番号を入力してください:",
+                    title="疑義照会 — 患者番号入力",
+                    default_text="",
+                    font=("Arial", 12),
+                )
+                # patient_number is None if cancelled, "" if empty, or the entered text
+                self.processor.submit_patient_number(patient_number or "")
 
             # Update display every 300ms
             self.update_display()

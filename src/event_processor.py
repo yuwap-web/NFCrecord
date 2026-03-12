@@ -1,9 +1,8 @@
 """Event processor coordinating NFC reads and input handling.
 
 State machine:
-  IDLE → (card placed) → WAITING_INPUT → (input or timeout) → RECORDING → (card removed) → IDLE
-                                                                  ↓ (card already removed)
-                                                                IDLE
+  IDLE → (card placed) → WAITING_INPUT → (key 1/2 or timeout) → WAIT_REMOVAL → (card removed) → IDLE
+                                        → (key 3: 疑義照会)   → WAITING_PATIENT_NUM → (number entered) → WAIT_REMOVAL → IDLE
 
 One card touch = exactly one record. No duplicates.
 """
@@ -30,12 +29,15 @@ from nfc_reader import NFCReaderWorker
 from input_handler import InputHandlerWorker
 from sheets_api import SheetsAPIWorker
 
+# Special value that triggers patient number input
+GIGI_SHOUKAI = "疑義照会"
+
 
 class State(Enum):
-    IDLE = "idle"                        # Waiting for card
-    WAITING_INPUT = "waiting_input"      # Card detected, waiting for key 1/2
-    RECORDED = "recorded"                # Record saved, waiting for card removal
-    WAIT_REMOVAL = "wait_removal"        # Waiting for card to be removed
+    IDLE = "idle"                                # Waiting for card
+    WAITING_INPUT = "waiting_input"              # Card detected, waiting for key 1/2/3
+    WAITING_PATIENT_NUM = "waiting_patient_num"  # Key 3 pressed, waiting for patient number
+    WAIT_REMOVAL = "wait_removal"                # Record saved, waiting for card removal
 
 
 class EventProcessor:
@@ -59,6 +61,9 @@ class EventProcessor:
         self._session_timestamp = None
         self._timeout_timer = None
 
+        # Flag: UI should show patient number dialog
+        self._needs_patient_number = False
+
         # Workers
         self.nfc_worker = None
         self.input_worker = None
@@ -69,18 +74,15 @@ class EventProcessor:
     def _start_workers(self):
         """Start background worker threads"""
         try:
-            # Start NFC reader — uses card placed/removed callbacks
             self.nfc_worker = NFCReaderWorker(
                 on_card_placed=self._on_card_placed,
                 on_card_removed=self._on_card_removed,
             )
             self.nfc_worker.start()
 
-            # Start input handler
             self.input_worker = InputHandlerWorker(callback=self._on_input)
             self.input_worker.start()
 
-            # Start Sheets API worker
             self.sheets_worker = SheetsAPIWorker(self.credentials_file)
             self.sheets_worker.start()
 
@@ -97,14 +99,35 @@ class EventProcessor:
             except Exception:
                 pass
 
+    @property
+    def needs_patient_number(self) -> bool:
+        """Check if UI needs to show patient number input dialog."""
+        return self._needs_patient_number
+
+    def submit_patient_number(self, patient_number: str):
+        """Called by UI after patient number is entered.
+        patient_number can be empty string if user cancelled."""
+        with self._state_lock:
+            self._needs_patient_number = False
+
+            if self._state != State.WAITING_PATIENT_NUM:
+                return  # State changed (e.g. card removed), ignore
+
+            if not patient_number:
+                # User cancelled — record without patient number
+                notes = ""
+            else:
+                notes = f"患者番号: {patient_number}"
+
+            print(f"⌨ Patient number entered: {patient_number or '(空)'}")
+            self._record_and_transition(GIGI_SHOUKAI, notes=notes)
+
     def _on_card_placed(self, uid: str):
         """Called when a card is placed on the reader (once per placement)."""
         with self._state_lock:
             if self._state != State.IDLE:
-                # Ignore — we're busy with a previous session
                 return
 
-            # Transition: IDLE → WAITING_INPUT
             self._state = State.WAITING_INPUT
             self._session_uid = uid
             self._session_timestamp = datetime.now()
@@ -112,7 +135,6 @@ class EventProcessor:
         print(f"📱 [Session start] Card placed (UID: {uid[:8]}...)")
         self._notify_status("nfc_detected", uid)
 
-        # Start timeout timer
         self._timeout_timer = threading.Timer(
             self.timeout_seconds, self._on_timeout
         )
@@ -122,54 +144,52 @@ class EventProcessor:
     def _on_card_removed(self):
         """Called when the card is removed from the reader."""
         with self._state_lock:
-            if self._state == State.WAIT_REMOVAL:
-                # Was waiting for removal → cycle complete
-                self._state = State.IDLE
-                self._session_uid = None
-                self._session_timestamp = None
-                print("📱 [Session end] Card removed → ready for next")
-                self._notify_status("waiting")
-            elif self._state == State.RECORDED:
-                # Record was already saved, card removed → done
+            if self._state in (State.WAIT_REMOVAL,):
                 self._state = State.IDLE
                 self._session_uid = None
                 self._session_timestamp = None
                 print("📱 [Session end] Card removed → ready for next")
                 self._notify_status("waiting")
             elif self._state == State.WAITING_INPUT:
-                # Card removed while waiting for input — still process with timeout/default
-                # Don't change state, let the timeout or input handle it
+                # Card removed while waiting — let timeout handle it
                 print("📱 Card removed while waiting for input")
+            elif self._state == State.WAITING_PATIENT_NUM:
+                # Card removed during patient number input — that's OK, still wait for input
+                print("📱 Card removed during patient number input (still waiting)")
 
     def _on_input(self, value: str):
-        """Called when keyboard input (1 or 2) is received."""
+        """Called when keyboard input (1, 2, or 3) is received."""
         with self._state_lock:
             if self._state != State.WAITING_INPUT:
-                return  # Ignore input when not waiting
+                return
 
             # Cancel timeout
             if self._timeout_timer:
                 self._timeout_timer.cancel()
 
-            print(f"⌨ Input received: {value}")
-            self._notify_status("input_received")
-
-            # Record the event
-            self._record_and_transition(value)
+            if value == GIGI_SHOUKAI:
+                # Key 3: need patient number → transition to WAITING_PATIENT_NUM
+                self._state = State.WAITING_PATIENT_NUM
+                self._needs_patient_number = True
+                print(f"⌨ Input received: {value} → waiting for patient number")
+                self._notify_status("waiting_patient_number")
+            else:
+                # Key 1 or 2: record immediately
+                print(f"⌨ Input received: {value}")
+                self._notify_status("input_received")
+                self._record_and_transition(value)
 
     def _on_timeout(self):
         """Called when input timeout expires."""
         with self._state_lock:
             if self._state != State.WAITING_INPUT:
-                return  # Already processed
+                return
 
             print(f"⏱ Input timeout → using default: {self.default_value}")
             self._notify_status("timeout")
-
-            # Record with default value
             self._record_and_transition(self.default_value)
 
-    def _record_and_transition(self, input_value: str):
+    def _record_and_transition(self, input_value: str, notes: str = ""):
         """Record event to Sheets and transition state.
         MUST be called while holding _state_lock."""
         uid = self._session_uid
@@ -179,7 +199,6 @@ class EventProcessor:
             self._state = State.IDLE
             return
 
-        # Format data
         timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
         content = "処方箋内容について確認"
 
@@ -187,18 +206,17 @@ class EventProcessor:
         if self.nfc_worker and self.nfc_worker.card_present:
             self._state = State.WAIT_REMOVAL
         else:
-            # Card already removed, go directly to IDLE
             self._state = State.IDLE
             self._session_uid = None
             self._session_timestamp = None
 
-        # Queue the Sheets write (outside lock is OK — thread-safe queue)
+        # Queue the Sheets write
         if self.sheets_worker:
             self.sheets_worker.add_row(
                 timestamp=timestamp_str,
                 content=content,
                 change=input_value,
-                notes="",
+                notes=notes,
             )
 
         # Notify UI
@@ -208,9 +226,10 @@ class EventProcessor:
                 "timestamp": timestamp_str,
                 "content": content,
                 "change": input_value,
+                "notes": notes,
             })
 
-        print(f"✓ [Recorded] {timestamp_str} | {input_value} | UID: {uid[:8]}...")
+        print(f"✓ [Recorded] {timestamp_str} | {input_value} | {notes} | UID: {uid[:8]}...")
 
         if self._state == State.WAIT_REMOVAL:
             self._notify_status("wait_removal")
@@ -232,8 +251,7 @@ class EventProcessor:
         return status
 
     def start(self):
-        """Start the event processor (no separate processing thread needed)"""
-        # All processing is event-driven via callbacks now
+        """Start the event processor (event-driven via callbacks)"""
         pass
 
     def stop(self):
