@@ -353,6 +353,7 @@
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
         <div class="nfc-icon" id="nfcIcon">📡</div>
         <p style="color:#888; font-size:14px;">受話器の NFC タグにかざしてください</p>
+        <p style="color:#bbb; font-size:11px; margin-top:8px;">🔋 画面スリープ防止中 — 充電推奨</p>
       </div>
     </div>
 
@@ -425,6 +426,7 @@
     let ndefReader = null;
     let countdownTimer = null;
     let countdown = TIMEOUT_SEC;
+    let wakeLock = null;
 
     // ===== Screen Management =====
     const screens = [
@@ -488,6 +490,37 @@
       setStatus('NFC スキャンを開始してください', 'status-idle');
     }
 
+    // ===== Wake Lock（画面スリープ防止）=====
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) {
+        addLog('Wake Lock 非対応（画面の自動スリープに注意）');
+        return;
+      }
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        addLog('画面スリープ防止: ON');
+        wakeLock.addEventListener('release', () => {
+          addLog('画面スリープ防止: 解除');
+        });
+      } catch (err) {
+        addLog('Wake Lock エラー: ' + err.message, 'error');
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+    }
+
+    // ページが再表示されたら Wake Lock を再取得
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && currentState === State.SCANNING) {
+        await requestWakeLock();
+      }
+    });
+
     // ===== NFC =====
     async function startScan() {
       try {
@@ -503,6 +536,9 @@
         showScreen('screenScanning');
         setStatus('NFC 待機中... タグにかざしてください', 'status-idle');
         addLog('NFC スキャン開始（常時待機）');
+
+        // 画面スリープ防止
+        await requestWakeLock();
 
       } catch (err) {
         setStatus('NFC エラー: ' + err.message, 'status-error');
