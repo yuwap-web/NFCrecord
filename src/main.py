@@ -27,7 +27,6 @@ try:
         _f.write(f"sys.executable: {sys.executable}\n")
         _f.write(f"app_dir: {app_dir}\n")
         _f.write(f"os.getcwd(): {os.getcwd()}\n")
-        _f.write(f"sys.path: {sys.path}\n")
         _config_path = os.path.join(app_dir, "config", "config.yaml")
         _cred_path = os.path.join(app_dir, "config", "credentials.json")
         _f.write(f"Expected config.yaml: {_config_path}\n")
@@ -39,7 +38,6 @@ try:
         for _item in os.listdir(app_dir):
             _full = os.path.join(app_dir, _item)
             _f.write(f"  {'[DIR]' if os.path.isdir(_full) else '[FILE]'} {_item}\n")
-        # List config dir if exists
         _config_dir = os.path.join(app_dir, "config")
         if os.path.isdir(_config_dir):
             _f.write(f"\nFiles in config/ ({_config_dir}):\n")
@@ -47,8 +45,8 @@ try:
                 _f.write(f"  [FILE] {_item}\n")
         else:
             _f.write(f"\nconfig/ directory NOT FOUND at {_config_dir}\n")
-except Exception as _e:
-    pass  # Can't write log, continue anyway
+except Exception:
+    pass
 
 import FreeSimpleGUI as sg
 
@@ -71,6 +69,8 @@ class NFCLoggerUI:
         self.processor = None
         self.log_entries = []
         self.window = None
+        self._status_message = "起動中..."
+        self._pending_uid = None
 
     def initialize(self) -> bool:
         """Initialize the UI and event processor"""
@@ -85,6 +85,7 @@ class NFCLoggerUI:
             self.processor = EventProcessor(
                 credentials_file=credentials_file,
                 callback=self._on_event,
+                status_callback=self._on_status_change,
             )
 
             # Start processing
@@ -98,52 +99,41 @@ class NFCLoggerUI:
 
     def create_layout(self):
         """Create the GUI layout"""
-        status_layout = [
-            [
-                sg.Text("Status:"),
-                sg.Text("Initializing...", key="-STATUS-", text_color="yellow"),
-            ],
-            [sg.Multiline(size=(60, 5), key="-STATUS-DETAIL-", disabled=True)],
-        ]
-
-        log_layout = [
-            [sg.Text("Recent Logs:")],
-            [
-                sg.Multiline(
-                    size=(60, LOG_LINES),
-                    key="-LOG-",
-                    disabled=True,
-                    text_color="white",
-                )
-            ],
-        ]
-
-        last_entry_layout = [
-            [sg.Text("Last Entry:")],
-            [
-                sg.Text("Timestamp:", font=("Arial", 10, "bold")),
-                sg.Text("--:--:--", key="-LAST-TIMESTAMP-"),
-            ],
-            [
-                sg.Text("Content:", font=("Arial", 10, "bold")),
-                sg.Text("---", key="-LAST-CONTENT-"),
-            ],
-            [
-                sg.Text("Change:", font=("Arial", 10, "bold")),
-                sg.Text("---", key="-LAST-CHANGE-"),
-            ],
-        ]
-
-        button_layout = [
-            [sg.Button("Refresh", key="-REFRESH-"), sg.Button("Exit", key="-EXIT-")]
-        ]
-
         layout = [
             [sg.Text(WINDOW_TITLE, font=("Arial", 16, "bold"))],
-            [sg.Column(status_layout)],
-            [sg.Column(log_layout)],
-            [sg.Column(last_entry_layout)],
-            [sg.Column(button_layout)],
+            [sg.HorizontalSeparator()],
+            # Status area - large and prominent
+            [
+                sg.Text("状態:", font=("Arial", 12)),
+                sg.Text("カード待機中...", key="-STATUS-", font=("Arial", 14, "bold"),
+                         text_color="lime green", size=(30, 1)),
+            ],
+            [sg.HorizontalSeparator()],
+            # Last entry
+            [sg.Text("最後の記録:", font=("Arial", 11, "bold"))],
+            [
+                sg.Text("日時:", size=(8, 1)),
+                sg.Text("---", key="-LAST-TIMESTAMP-", size=(25, 1)),
+            ],
+            [
+                sg.Text("変更:", size=(8, 1)),
+                sg.Text("---", key="-LAST-CHANGE-", font=("Arial", 12, "bold"),
+                         size=(25, 1)),
+            ],
+            [sg.HorizontalSeparator()],
+            # Log area
+            [sg.Text("ログ:", font=("Arial", 11, "bold"))],
+            [
+                sg.Multiline(
+                    size=(65, LOG_LINES),
+                    key="-LOG-",
+                    disabled=True,
+                    autoscroll=True,
+                    font=("Consolas", 9),
+                )
+            ],
+            # Buttons
+            [sg.Button("終了", key="-EXIT-", size=(10, 1))],
         ]
 
         return layout
@@ -156,44 +146,64 @@ class NFCLoggerUI:
         nfc_uid = event_data.get("nfc_uid")
 
         # Add to log
-        log_entry = f"[{timestamp}] {content} → {change} (UID: {nfc_uid[:8]}...)"
+        log_entry = f"[{timestamp}] {change} (UID: {nfc_uid[:8]}...)"
         self.log_entries.insert(0, log_entry)
         self.log_entries = self.log_entries[:LOG_LINES]
 
+        self._status_message = "✓ 記録完了 → カード待機中..."
+        self._pending_uid = None
+
         print(f"Event recorded: {log_entry}")
 
-    def update_status(self):
-        """Update status information"""
-        if not self.processor:
+    def _on_status_change(self, status: str, uid: str = None):
+        """Callback for status changes from event processor"""
+        if status == "nfc_detected":
+            self._status_message = f"📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし)"
+            self._pending_uid = uid
+        elif status == "waiting":
+            self._status_message = "カード待機中..."
+            self._pending_uid = None
+        elif status == "timeout":
+            self._status_message = "⏱ タイムアウト → 変更ありで記録"
+        elif status == "input_received":
+            self._status_message = "⌨ 入力受付 → 記録中..."
+
+    def update_display(self):
+        """Update all GUI elements"""
+        if not self.window:
             return
 
         try:
-            status = self.processor.get_status()
+            # Update status
+            self.window["-STATUS-"].update(self._status_message)
 
-            # Format status text
-            status_text = ""
-            for component, state in status.items():
-                status_text += f"{component}: {state}\n"
+            # Update status color
+            if "待機中" in self._status_message:
+                self.window["-STATUS-"].update(text_color="lime green")
+            elif "入力待ち" in self._status_message:
+                self.window["-STATUS-"].update(text_color="yellow")
+            elif "記録完了" in self._status_message:
+                self.window["-STATUS-"].update(text_color="cyan")
+            elif "タイムアウト" in self._status_message:
+                self.window["-STATUS-"].update(text_color="orange")
 
-            # Update window
-            if self.window:
-                self.window["-STATUS-DETAIL-"].update(status_text)
-
-        except Exception as e:
-            print(f"Error updating status: {e}")
-
-    def update_logs(self):
-        """Update log display"""
-        if self.window:
+            # Update log
             log_text = "\n".join(self.log_entries)
             self.window["-LOG-"].update(log_text)
 
-    def update_last_entry(self, timestamp, content, change):
-        """Update last entry display"""
-        if self.window:
-            self.window["-LAST-TIMESTAMP-"].update(timestamp)
-            self.window["-LAST-CONTENT-"].update(content)
-            self.window["-LAST-CHANGE-"].update(change)
+            # Update last entry
+            if self.log_entries:
+                first_log = self.log_entries[0]
+                parts = first_log.split("] ", 1)
+                if len(parts) == 2:
+                    timestamp = parts[0].strip("[")
+                    rest = parts[1]
+                    change = rest.split("(")[0].strip()
+                    self.window["-LAST-TIMESTAMP-"].update(timestamp)
+                    self.window["-LAST-CHANGE-"].update(change)
+
+        except Exception as e:
+            print(f"Error updating display: {e}")
 
     def run(self):
         """Main UI event loop"""
@@ -218,36 +228,17 @@ class NFCLoggerUI:
             finalize=True,
         )
 
-        # Initial status update
-        self.update_status()
+        self._status_message = "カード待機中..."
 
         # Main event loop
         while True:
-            event, values = self.window.read(timeout=500)
+            event, values = self.window.read(timeout=300)
 
             if event == sg.WINDOW_CLOSED or event == "-EXIT-":
                 break
 
-            if event == "-REFRESH-":
-                self.update_status()
-
-            # Periodic updates
-            self.update_logs()
-
-            # Update last entry if we have logs
-            if self.log_entries:
-                first_log = self.log_entries[0]
-                # Parse log entry
-                parts = first_log.split("] ", 1)
-                if len(parts) == 2:
-                    timestamp = parts[0].strip("[")
-                    rest = parts[1]
-                    # Extract components
-                    if "→" in rest:
-                        content_part, change_part = rest.split("→", 1)
-                        content = content_part.strip()
-                        change = change_part.split("(")[0].strip()
-                        self.update_last_entry(timestamp, content, change)
+            # Update display every 300ms
+            self.update_display()
 
         # Cleanup
         self.processor.stop()

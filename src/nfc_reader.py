@@ -3,7 +3,7 @@
 import sys
 import os
 import threading
-import queue
+import time
 from typing import Optional, Callable
 
 # Fix module path for PyInstaller
@@ -24,13 +24,22 @@ except ImportError:
 
 from config import config
 
+# Known "normal" errors that mean no card is present
+_NORMAL_ERRORS = [
+    "Card not present",
+    "カードが取り出されました",
+    "0x80100069",  # SCARD_W_REMOVED_CARD
+    "0x80100066",  # SCARD_W_UNPOWERED_CARD
+    "0x80100009",  # SCARD_E_UNKNOWN_READER
+    "REMOVED",
+]
+
 
 class NFCReader:
     """SONY RC-380 NFC Reader interface"""
 
     def __init__(self):
         self.reader_index = 0
-        self.last_uid = None
         self._lock = threading.Lock()
         self._initialized = False
 
@@ -59,7 +68,7 @@ class NFCReader:
             return False
 
     def read_card(self) -> Optional[str]:
-        """Read NFC card UID (non-blocking)"""
+        """Read NFC card UID (non-blocking). Returns UID string or None."""
         if not HAS_SMARTCARD or not self._initialized:
             return None
 
@@ -74,8 +83,7 @@ class NFCReader:
                 connection = reader.createConnection()
                 connection.connect()
 
-                # SELECT command to get UID
-                # This is a simplified example - actual implementation depends on card type
+                # APDU command to get UID
                 apdu = [0xFF, 0xCA, 0x00, 0x00, 0x00]
                 response, sw1, sw2 = connection.transmit(apdu)
 
@@ -86,9 +94,13 @@ class NFCReader:
                 return None
 
         except Exception as e:
-            # No card detected is normal, only log on other errors
-            if "Card not present" not in str(e):
-                print(f"NFC read error: {e}")
+            # Check if this is a normal "no card" situation
+            error_str = str(e)
+            for pattern in _NORMAL_ERRORS:
+                if pattern in error_str:
+                    return None  # Silently return None — card not present
+            # Only log truly unexpected errors
+            print(f"NFC read error (unexpected): {e}")
             return None
 
     def get_status(self) -> str:
@@ -119,30 +131,36 @@ class NFCReaderWorker(threading.Thread):
         self.callback = callback
         self.running = True
         self.last_uid = None
+        self.card_present = False
         self.poll_interval = config.get("nfc.poll_interval", 0.5)
 
     def run(self):
         """Main reader loop"""
-        import time
-
         print(f"NFC Reader worker started (poll interval: {self.poll_interval}s)")
 
         while self.running:
             try:
                 uid = self.reader.read_card()
 
-                # Only trigger callback on new card detection
-                if uid and uid != self.last_uid:
-                    self.last_uid = uid
-                    if self.callback:
-                        self.callback(uid)
+                if uid:
+                    # Card is present
+                    if not self.card_present or uid != self.last_uid:
+                        # New card detected (or different card)
+                        self.card_present = True
+                        self.last_uid = uid
+                        if self.callback:
+                            self.callback(uid)
+                else:
+                    # No card present
+                    if self.card_present:
+                        # Card was just removed
+                        self.card_present = False
+                        self.last_uid = None
 
                 time.sleep(self.poll_interval)
 
             except Exception as e:
                 print(f"NFC Reader worker error: {e}")
-                import time
-
                 time.sleep(1)
 
     def stop(self):

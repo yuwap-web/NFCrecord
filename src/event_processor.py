@@ -26,9 +26,11 @@ from sheets_api import SheetsAPIWorker
 class EventProcessor:
     """Coordinates NFC reads, input handling, and Sheets API"""
 
-    def __init__(self, credentials_file: str, callback: Optional[Callable] = None):
+    def __init__(self, credentials_file: str, callback: Optional[Callable] = None,
+                 status_callback: Optional[Callable] = None):
         self.credentials_file = credentials_file
-        self.ui_callback = callback  # Callback to update UI
+        self.ui_callback = callback
+        self.status_callback = status_callback
         self.timeout_seconds = config.get("input.timeout_seconds", 5)
         self.default_value = config.get("input.default_on_timeout", "変更あり")
 
@@ -38,6 +40,7 @@ class EventProcessor:
         self.input_value = None
         self.input_ready = threading.Event()
         self._lock = threading.Lock()
+        self._timeout_timer = None
 
         # Workers
         self.nfc_worker = None
@@ -67,22 +70,35 @@ class EventProcessor:
         except Exception as e:
             print(f"✗ Error starting workers: {e}")
 
+    def _notify_status(self, status: str, uid: str = None):
+        """Notify UI of status change"""
+        if self.status_callback:
+            try:
+                self.status_callback(status, uid)
+            except Exception:
+                pass
+
     def _on_nfc_read(self, uid: str):
         """Callback when NFC card is read"""
         with self._lock:
+            # Cancel any existing timer
+            if self._timeout_timer:
+                self._timeout_timer.cancel()
+
             self.pending_nfc = uid
             self.pending_timestamp = datetime.now()
             self.input_value = None
             self.input_ready.clear()
 
         print(f"📱 NFC card detected: {uid}")
+        self._notify_status("nfc_detected", uid)
 
         # Start timeout timer
-        timer = threading.Timer(
+        self._timeout_timer = threading.Timer(
             self.timeout_seconds, self._on_input_timeout
         )
-        timer.daemon = True
-        timer.start()
+        self._timeout_timer.daemon = True
+        self._timeout_timer.start()
 
     def _on_input(self, value: str):
         """Callback when input (Stream Deck or keyboard) is received"""
@@ -90,10 +106,15 @@ class EventProcessor:
             if self.pending_nfc is None:
                 return  # No pending NFC read
 
+            # Cancel timeout timer
+            if self._timeout_timer:
+                self._timeout_timer.cancel()
+
             self.input_value = value
             self.input_ready.set()
 
         print(f"⌨ Input received: {value}")
+        self._notify_status("input_received")
 
     def _on_input_timeout(self):
         """Handle input timeout - use default value"""
@@ -104,6 +125,7 @@ class EventProcessor:
             if not self.input_ready.is_set():
                 self.input_value = self.default_value
                 print(f"⏱ Input timeout - using default: {self.default_value}")
+                self._notify_status("timeout")
 
             self.input_ready.set()
 
@@ -112,42 +134,49 @@ class EventProcessor:
         while True:
             with self._lock:
                 if self.pending_nfc is None or not self.input_ready.is_set():
-                    time.sleep(0.1)
-                    continue
+                    pass  # Nothing to process yet
+                else:
+                    # Process the pending NFC + input
+                    nfc_uid = self.pending_nfc
+                    timestamp = self.pending_timestamp
+                    input_value = self.input_value or self.default_value
 
-                # Process the pending NFC + input
-                nfc_uid = self.pending_nfc
-                timestamp = self.pending_timestamp
-                input_value = self.input_value or self.default_value
+                    # Reset pending state
+                    self.pending_nfc = None
+                    self.pending_timestamp = None
+                    self.input_value = None
+                    self.input_ready.clear()
 
-                # Reset pending state
-                self.pending_nfc = None
-                self.pending_timestamp = None
-                self.input_value = None
+                    # Do the actual work outside the lock
+                    self._record_event(nfc_uid, timestamp, input_value)
 
-            # Format timestamp
-            timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            content = "処方箋内容について確認"
+            time.sleep(0.1)
 
-            # Add to Sheets queue
-            if self.sheets_worker:
-                self.sheets_worker.add_row(
-                    timestamp=timestamp_str,
-                    content=content,
-                    change=input_value,
-                    notes="",
-                )
+    def _record_event(self, nfc_uid: str, timestamp, input_value: str):
+        """Record a completed event to Sheets and notify UI"""
+        # Format timestamp
+        timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        content = "処方箋内容について確認"
 
-            # Notify UI callback
-            if self.ui_callback:
-                self.ui_callback(
-                    {
-                        "nfc_uid": nfc_uid,
-                        "timestamp": timestamp_str,
-                        "content": content,
-                        "change": input_value,
-                    }
-                )
+        # Add to Sheets queue
+        if self.sheets_worker:
+            self.sheets_worker.add_row(
+                timestamp=timestamp_str,
+                content=content,
+                change=input_value,
+                notes="",
+            )
+
+        # Notify UI callback
+        if self.ui_callback:
+            self.ui_callback(
+                {
+                    "nfc_uid": nfc_uid,
+                    "timestamp": timestamp_str,
+                    "content": content,
+                    "change": input_value,
+                }
+            )
 
     def get_status(self) -> Dict[str, str]:
         """Get current status of all components"""
@@ -169,6 +198,9 @@ class EventProcessor:
 
     def stop(self):
         """Stop all workers"""
+        if self._timeout_timer:
+            self._timeout_timer.cancel()
+
         if self.nfc_worker:
             self.nfc_worker.stop()
 
