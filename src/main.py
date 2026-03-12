@@ -17,6 +17,39 @@ else:
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
+# Write debug log file next to the EXE
+_debug_log_path = os.path.join(app_dir, "debug.log")
+try:
+    with open(_debug_log_path, "w", encoding="utf-8") as _f:
+        _f.write(f"=== NFC Sheets Logger Debug Log ===\n")
+        _f.write(f"Time: {datetime.now()}\n")
+        _f.write(f"sys.frozen: {getattr(sys, 'frozen', False)}\n")
+        _f.write(f"sys.executable: {sys.executable}\n")
+        _f.write(f"app_dir: {app_dir}\n")
+        _f.write(f"os.getcwd(): {os.getcwd()}\n")
+        _f.write(f"sys.path: {sys.path}\n")
+        _config_path = os.path.join(app_dir, "config", "config.yaml")
+        _cred_path = os.path.join(app_dir, "config", "credentials.json")
+        _f.write(f"Expected config.yaml: {_config_path}\n")
+        _f.write(f"  exists: {os.path.exists(_config_path)}\n")
+        _f.write(f"Expected credentials.json: {_cred_path}\n")
+        _f.write(f"  exists: {os.path.exists(_cred_path)}\n")
+        # List files in app_dir
+        _f.write(f"\nFiles in app_dir ({app_dir}):\n")
+        for _item in os.listdir(app_dir):
+            _full = os.path.join(app_dir, _item)
+            _f.write(f"  {'[DIR]' if os.path.isdir(_full) else '[FILE]'} {_item}\n")
+        # List config dir if exists
+        _config_dir = os.path.join(app_dir, "config")
+        if os.path.isdir(_config_dir):
+            _f.write(f"\nFiles in config/ ({_config_dir}):\n")
+            for _item in os.listdir(_config_dir):
+                _f.write(f"  [FILE] {_item}\n")
+        else:
+            _f.write(f"\nconfig/ directory NOT FOUND at {_config_dir}\n")
+except Exception as _e:
+    pass  # Can't write log, continue anyway
+
 import FreeSimpleGUI as sg
 
 from config import config
