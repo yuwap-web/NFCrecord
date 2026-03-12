@@ -53,18 +53,27 @@ jobs:
       - name: Create release notes file
         run: |
           @"
-          # NFC Sheets Logger - Windows Executable
+          # NFC Sheets Logger - Windows 実行ファイル
 
-          Download ``NFCrecord.exe`` and run it on Windows.
+          NFC カードタッチを Google Sheets に自動記録するアプリケーションです。
 
-          ## Quick Start
+          ## セットアップ
 
-          1. Download ``NFCrecord.exe`` below
-          2. Create a ``config`` folder next to the EXE
-          3. Copy ``config.yaml`` and ``credentials.json`` into the ``config`` folder
-          4. Run ``NFCrecord.exe``
+          1. 下の ``NFCrecord.exe`` をダウンロード
+          2. EXE と同じフォルダに ``config`` フォルダを作成
+          3. ``config`` フォルダに ``config.yaml`` と ``credentials.json`` を配置
+          4. ``NFCrecord.exe`` を実行
 
-          See [Setup Guide](https://github.com/${{ github.repository }}/blob/main/setup/README_SETUP.md) for details.
+          ## 操作方法
+
+          | キー | 動作 |
+          |------|------|
+          | **1** | 変更あり |
+          | **2** | 変更なし |
+          | **3** | 疑義照会（患者番号入力） |
+          | 5秒無操作 | 変更あり（デフォルト） |
+
+          詳細は [README](https://github.com/${{ github.repository }}/blob/main/README.md) / [セットアップガイド](https://github.com/${{ github.repository }}/blob/main/setup/README_SETUP.md) を参照してください。
           "@ | Out-File -FilePath release_notes.md -Encoding utf8
 
       - name: Create Release

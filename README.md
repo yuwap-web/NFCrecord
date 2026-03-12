@@ -1,116 +1,62 @@
 # NFC Sheets Logger
 
-Automatic NFC card logging system that records card touches to Google Sheets with SONY RC-380 NFC card reader.
+SONY RC-380 NFC カードリーダーを使用して、カードタッチを自動的に Google Sheets に記録するシステムです。
 
-## Overview
+## 概要
 
-This application monitors an NFC card reader (SONY RC-380) and automatically logs card touches to a Google Sheets spreadsheet. It supports both Stream Deck buttons and keyboard input for selecting additional information during logging.
+薬局での処方箋に関する電話問い合わせを記録するために設計されています。NFC カードをリーダーにタッチするだけで、タイムスタンプと対応内容が自動的にスプレッドシートに記録されます。
 
-### Use Case
+### 動作フロー
 
-This system is designed for logging phone inquiries about prescriptions at hospitals:
-- When an NFC card is touched, the timestamp is automatically recorded
-- User selects via Stream Deck or keyboard whether there was a change (1 key = change, 2 key = no change)
-- Default action (5-second timeout) records as "change exists"
-
-## System Requirements
-
-- **Windows 10+** (for running the application)
-- **Mac** (for development)
-- **NFC Card Reader**: SONY RC-380
-- **NFC Cards**: Standard NFC cards/tags
-- **Google Account**: Personal account (gmail.com, etc.) - **Workspace NOT required**
-  - Free tier: 1 million cells read/write per month
-- **Optional**: Stream Deck (for button-based input)
-
-## Installation
-
-### 1. Development Setup (Mac)
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/NFCrecord
-cd NFCrecord
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+```
+カードタッチ → 入力待ち（5秒）→ 記録 → カード取り外し → 次の待機
 ```
 
-### 2. Configure Google Sheets API
+1. NFC カードをリーダーにタッチ
+2. 5秒以内にキーを押して対応内容を選択：
+   - **キー1**: 変更あり
+   - **キー2**: 変更なし
+   - **キー3**: 疑義照会（患者番号入力ダイアログが表示）
+   - **5秒タイムアウト**: 自動的に「変更あり」で記録
+3. Google Sheets に自動記録
+4. カードを取り外して次の記録へ
 
-```bash
-# Run setup wizard
-python setup/setup_credentials.py
+**1回のタッチ = 1件の記録**が保証されます（状態マシンによる制御）。
+
+## 必要な環境
+
+| 項目 | 要件 |
+|---|---|
+| OS | Windows 10 以上 |
+| NFC リーダー | SONY RC-380（USB接続） |
+| Google アカウント | 個人アカウント（gmail.com）で OK、**Workspace 不要** |
+| オプション | Stream Deck（ボタン入力用） |
+
+## クイックスタート
+
+### 1. EXE のダウンロード
+
+[GitHub Releases](https://github.com/yuwap-web/NFCrecord/releases) から最新の `NFCrecord.exe` をダウンロード
+
+### 2. フォルダ構成
+
+以下の構成でフォルダを作成してください：
+
+```
+C:\NFCrecord\
+├── NFCrecord.exe          ← ダウンロードした EXE
+└── config\
+    ├── config.yaml        ← 設定ファイル
+    └── credentials.json   ← Google サービスアカウントの鍵
 ```
 
-This will:
-1. Guide you through creating a Google Cloud service account
-2. Download credentials JSON
-3. Configure your Google Sheets spreadsheet ID
-4. Generate configuration files
+### 3. config.yaml の作成
 
-### 3. Windows Setup
-
-Download the latest `NFCrecord.exe` from [GitHub Releases](https://github.com/yourusername/NFCrecord/releases)
-
-Or build it yourself:
-```bash
-# On Windows
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-pyinstaller --onefile --name NFCrecord src/main.py
-```
-
-### 4. SONY RC-380 Driver Installation
-
-1. Download the SONY RC-380 driver for Windows
-2. Install the driver
-3. Connect RC-380 via USB
-
-## Usage
-
-### Starting the Application
-
-**Mac (Development)**:
-```bash
-python src/main.py
-```
-
-**Windows**:
-```bash
-# Run the .exe file
-NFCrecord.exe
-```
-
-### Recording a Log Entry
-
-1. Touch NFC card to the reader
-2. Within 5 seconds, press one of these:
-   - **Key "1"** or **Stream Deck Button 1**: Record "変更あり" (Change exists)
-   - **Key "2"** or **Stream Deck Button 2**: Record "変更なし" (No change)
-   - **Wait 5 seconds**: Automatically records "変更あり" (default)
-3. Entry is recorded to Google Sheets with timestamp
-
-### Google Sheets Format
-
-The spreadsheet logs include:
-
-| 日時 | 問い合わせ内容 | 変更の有無 | 備考 |
-|------|---|---|---|
-| 2026-03-11 14:30 | 処方箋内容について確認 | 変更なし | |
-| 2026-03-11 15:45 | 処方箋内容について確認 | 変更あり | |
-
-## Configuration
-
-Configuration file: `config/config.yaml`
+`config\config.yaml` を以下の内容で作成してください。`spreadsheet_id` はご自身のスプレッドシートの ID に変更してください。
 
 ```yaml
 google_sheets:
-  spreadsheet_id: "your-spreadsheet-id"
+  spreadsheet_id: "あなたのスプレッドシートID"
   sheet_name: "NFC Logs"
   columns:
     - 日時
@@ -126,7 +72,7 @@ input:
   key_mappings:
     "1": "変更あり"
     "2": "変更なし"
-    "3": "タイムアウト"
+    "3": "疑義照会"
   timeout_seconds: 5
   default_on_timeout: "変更あり"
 
@@ -136,139 +82,192 @@ gui:
   log_lines: 10
 ```
 
-## Project Structure
+> **スプレッドシート ID の確認方法**: Google Sheets の URL `https://docs.google.com/spreadsheets/d/{この部分}/edit` の `{この部分}` がIDです。
+
+### 4. Google Sheets API の設定
+
+詳細は [セットアップガイド](setup/README_SETUP.md) を参照してください。
+
+1. Google Cloud Console でプロジェクトを作成
+2. Google Sheets API を有効化
+3. サービスアカウントを作成し、JSON キーをダウンロード
+4. ダウンロードした JSON を `config\credentials.json` として配置
+5. スプレッドシートをサービスアカウントの email と共有（エディタ権限）
+
+### 5. SONY RC-380 ドライバのインストール
+
+1. SONY 公式サイトから RC-380 ドライバをダウンロード
+2. インストール後、RC-380 を USB 接続
+3. デバイスマネージャーで「PaSoRi」が表示されることを確認
+
+### 6. 起動
+
+`NFCrecord.exe` をダブルクリックして起動
+
+## 操作方法
+
+### GUI の状態表示
+
+| 状態 | 色 | 意味 |
+|---|---|---|
+| カード待機中... | 緑 | カードタッチを待っています |
+| カード検出 → 入力待ち | 黄 | キー1/2/3 を押してください |
+| 疑義照会 → 患者番号入力 | 黄 | 患者番号を入力してください |
+| 記録完了！カードを取り外してください | 水色 | カードをリーダーから離してください |
+| タイムアウト → 変更ありで記録 | オレンジ | 5秒経過、デフォルト値で記録 |
+
+### キー入力
+
+| キー | 動作 | スプレッドシートの記録 |
+|---|---|---|
+| **1** | 変更あり | 変更の有無 = "変更あり" |
+| **2** | 変更なし | 変更の有無 = "変更なし" |
+| **3** | 疑義照会 | 変更の有無 = "疑義照会"、備考 = "患者番号: XXXXX" |
+| タイムアウト | 5秒無操作 | 変更の有無 = "変更あり"（デフォルト） |
+
+> **キーの追加**: `config.yaml` の `key_mappings` にキーを追加するだけで、新しい選択肢を増やせます（疑義照会のような特殊動作を除く）。
+
+### スプレッドシートの記録例
+
+| 日時 | 問い合わせ内容 | 変更の有無 | 備考 |
+|---|---|---|---|
+| 2026-03-12 14:30:00 | 処方箋内容について確認 | 変更あり | |
+| 2026-03-12 14:31:00 | 処方箋内容について確認 | 変更なし | |
+| 2026-03-12 14:32:00 | 処方箋内容について確認 | 疑義照会 | 患者番号: 12345 |
+
+## 設定のカスタマイズ
+
+### キーの追加（config.yaml のみ）
+
+```yaml
+input:
+  key_mappings:
+    "1": "変更あり"
+    "2": "変更なし"
+    "3": "疑義照会"
+    "4": "その他"        # ← 追加するだけで動作します
+```
+
+### タイムアウト時間の変更
+
+```yaml
+input:
+  timeout_seconds: 10       # 5秒 → 10秒に変更
+  default_on_timeout: "変更なし"  # デフォルト値を変更
+```
+
+## プロジェクト構成
 
 ```
 NFCrecord/
 ├── src/
-│   ├── main.py                 # Main UI entry point
-│   ├── config.py               # Configuration management
-│   ├── nfc_reader.py           # NFC reader interface
-│   ├── sheets_api.py           # Google Sheets API
-│   ├── input_handler.py        # Stream Deck + keyboard input
-│   └── event_processor.py      # Event coordination
+│   ├── main.py              # GUI エントリーポイント（FreeSimpleGUI）
+│   ├── config.py            # 設定管理（YAML読み込み）
+│   ├── nfc_reader.py        # NFC リーダー制御（状態ベース検出）
+│   ├── sheets_api.py        # Google Sheets API 連携
+│   ├── input_handler.py     # キーボード / Stream Deck 入力
+│   └── event_processor.py   # 状態マシンによるイベント制御
 ├── setup/
-│   └── setup_credentials.py    # Setup wizard
+│   ├── setup_credentials.py # セットアップウィザード
+│   └── README_SETUP.md      # セットアップガイド
 ├── config/
-│   ├── credentials.json        # Google service account (NOT in git)
-│   └── config.yaml             # Configuration
-├── requirements.txt            # Python dependencies
-├── setup.py                    # Package setup
-└── README.md                   # This file
+│   ├── config.yaml          # 設定ファイル
+│   └── credentials.json     # Google 認証情報（※Git管理外）
+├── .github/
+│   └── workflows/
+│       └── build-windows-exe.yml  # GitHub Actions ビルド
+├── requirements.txt         # Python 依存パッケージ
+└── README.md                # このファイル
 ```
 
-## Troubleshooting
+## アーキテクチャ
 
-### NFC Reader Not Detected
-
-```
-⚠ No NFC readers found. Please connect SONY RC-380
-```
-
-- Check USB connection
-- Verify driver installation
-- Try different USB port
-
-### Google Sheets API Error
+### 状態マシン
 
 ```
-✗ Failed to initialize Sheets API
+IDLE（カード待機）
+  ↓ カードタッチ（1回だけ検出）
+WAITING_INPUT（入力待ち）
+  ├─ キー1/2 or タイムアウト → 記録 → WAIT_REMOVAL
+  └─ キー3（疑義照会）→ WAITING_PATIENT_NUM → 患者番号入力 → 記録 → WAIT_REMOVAL
+WAIT_REMOVAL（カード取り外し待ち）
+  ↓ カード取り外し
+IDLE（次のカード待機）
 ```
 
-- Verify `credentials.json` exists in `config/` directory
-- Check spreadsheet ID is correct
-- Ensure service account has access to the spreadsheet
-
-### Stream Deck Not Detected
+### マルチスレッド構成
 
 ```
-⚠ No Stream Deck device found
+┌────────────────────────────────┐
+│   メインスレッド（GUI）         │
+│   FreeSimpleGUI ウィンドウ     │
+└───────────┬────────────────────┘
+            │ コールバック
+   ┌────────┼──────────┐
+   ▼        ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│NFC     │ │入力    │ │Sheets  │
+│リーダー │ │ハンドラ │ │API     │
+│スレッド │ │スレッド │ │スレッド │
+└───┬────┘ └───┬────┘ └────────┘
+    │          │
+    └────┬─────┘
+         ▼
+   ┌──────────────┐
+   │EventProcessor│
+   │（状態マシン） │
+   └──────────────┘
 ```
 
-- Connect Stream Deck via USB
-- Install Stream Deck software
-- App will continue with keyboard input only
+## トラブルシューティング
 
-### Input Not Responding
+### NFC リーダーが認識されない
 
-- Ensure `config.yaml` contains valid key mappings
-- For Windows: may need admin privileges for keyboard listener
-- Try keyboard input (1, 2 keys) if Stream Deck is not available
+- USB 接続を確認
+- RC-380 ドライバが正しくインストールされているか確認
+- デバイスマネージャーで「PaSoRi」が表示されるか確認
+- 別の USB ポートを試す
 
-## Development
+### Google Sheets に書き込めない
 
-### Running in Development Mode
+- `credentials.json` が `config/` フォルダに存在するか確認
+- スプレッドシート ID が正しいか確認
+- サービスアカウントの email でスプレッドシートが共有されているか確認
+- Google Sheets API が有効か確認
 
-```bash
-source venv/bin/activate
-python src/main.py
-```
+### キーボード入力が反応しない
 
-### Running Tests
+- Windows で管理者権限が必要な場合があります
+- EXE を右クリック → 「管理者として実行」を試す
 
-```bash
-python -m pytest tests/
-```
+### EXE が起動しない / 設定エラー
 
-### Building Windows EXE Locally
+- `config` フォルダが EXE と同じ階層にあるか確認
+- ファイル名が正しいか確認（`config.yaml`、`credentials.json`）
+- Windows のファイル拡張子表示を有効にして確認
+- EXE と同じフォルダに生成される `debug.log` を確認
 
-```bash
-pip install pyinstaller
-pyinstaller --onefile --name NFCrecord src/main.py
-```
+## 開発
 
-The EXE will be in `dist/NFCrecord.exe`
+### ビルド
 
-## Architecture
+GitHub Actions により、`main` ブランチへの push で自動的に Windows EXE がビルドされ、GitHub Releases に公開されます。
 
-The application uses a multi-threaded architecture:
+### 依存パッケージ
 
-```
-┌─────────────────────────────┐
-│   Main UI Thread            │
-│  (PySimpleGUI Window)       │
-└──────────┬──────────────────┘
-           │
-      ┌────┴──────┬──────────┐
-      ▼           ▼          ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│NFC       │ │Input     │ │Sheets    │
-│Reader    │ │Handler   │ │API       │
-│Thread    │ │Thread    │ │Thread    │
-└─────┬────┘ └────┬─────┘ └──────────┘
-      │           │
-      └─────┬─────┘
-            ▼
-      ┌────────────────┐
-      │Event Processor │
-      │(Coordinator)   │
-      └────────────────┘
-```
+- **FreeSimpleGUI** - GUI フレームワーク（PySimpleGUI 4.x 互換の無料フォーク）
+- **pyscard** - PC/SC スマートカードインターフェース
+- **google-api-python-client** - Google Sheets API
+- **keyboard** - キーボードホットキー
+- **PyYAML** - 設定ファイル読み込み
+- **PyInstaller** - Windows EXE ビルド
 
-## Security Considerations
+## セキュリティ
 
-- `credentials.json` is never committed to git (listed in .gitignore)
-- Service account permissions are limited to specific Sheets
-- Keyboard input requires no special permissions
-- Stream Deck integration is optional
+- `credentials.json` は Git 管理外です（`.gitignore` に記載）
+- サービスアカウントの権限は指定したスプレッドシートのみに限定されます
+- NFC カードの UID は FeliCa の仕様上、読み取りごとにランダムな値が返されるため、個人の追跡には使用できません
 
-## License
+## ライセンス
 
 MIT License
-
-## Support
-
-For issues or feature requests, please create an issue on [GitHub](https://github.com/yourusername/NFCrecord/issues)
-
-## Author
-
-Your Name <your.email@example.com>
-
-## Changelog
-
-### v0.1.0 (2026-03-11)
-- Initial release
-- NFC card reading support
-- Google Sheets logging
-- Stream Deck + keyboard input
-- Windows executable via GitHub Actions

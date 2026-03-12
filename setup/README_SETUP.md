@@ -92,7 +92,7 @@
 
 ### 4.2 NFCrecord アプリケーションをダウンロード
 
-1. [GitHub Releases](https://github.com/yourusername/NFCrecord/releases) にアクセス
+1. [GitHub Releases](https://github.com/yuwap-web/NFCrecord/releases) にアクセス
 2. 最新バージョンの `NFCrecord.exe` をダウンロード
 3. ドキュメントフォルダなど、わかりやすい場所に保存
 
@@ -195,7 +195,7 @@ python src/main.py
 ## サポート
 
 質問や問題がある場合：
-1. [GitHub Issues](https://github.com/yourusername/NFCrecord/issues) で報告
+1. [GitHub Issues](https://github.com/yuwap-web/NFCrecord/issues) で報告
 2. エラーメッセージをスクリーンショットで添付
 
 ## セキュリティに関する注意
