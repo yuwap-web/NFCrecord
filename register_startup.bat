@@ -20,6 +20,12 @@ if not exist "%EXE_PATH%" (
     exit /b 1
 )
 
+:: ダウンロードしたファイルの MOTW（Mark of the Web）を解除
+:: これにより SmartScreen 警告を回避できる
+echo ダウンロードブロックを解除しています...
+powershell -Command "Get-ChildItem '%APP_DIR%' -Include '*.exe','*.bat' -Recurse | Unblock-File -ErrorAction SilentlyContinue"
+echo.
+
 :: 既存のショートカットを確認
 if exist "%STARTUP_DIR%\%SHORTCUT_NAME%" (
     echo [情報] スタートアップに既に登録されています。
