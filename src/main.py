@@ -150,23 +150,20 @@ class NFCLoggerUI:
         self.log_entries.insert(0, log_entry)
         self.log_entries = self.log_entries[:LOG_LINES]
 
-        self._status_message = "✓ 記録完了 → カード待機中..."
-        self._pending_uid = None
-
         print(f"Event recorded: {log_entry}")
 
     def _on_status_change(self, status: str, uid: str = None):
         """Callback for status changes from event processor"""
         if status == "nfc_detected":
-            self._status_message = f"📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし)"
-            self._pending_uid = uid
+            self._status_message = "📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし)"
         elif status == "waiting":
             self._status_message = "カード待機中..."
-            self._pending_uid = None
         elif status == "timeout":
-            self._status_message = "⏱ タイムアウト → 変更ありで記録"
+            self._status_message = "⏱ タイムアウト → 変更ありで記録中..."
         elif status == "input_received":
             self._status_message = "⌨ 入力受付 → 記録中..."
+        elif status == "wait_removal":
+            self._status_message = "✓ 記録完了！ カードを取り外してください"
 
     def update_display(self):
         """Update all GUI elements"""
@@ -182,9 +179,11 @@ class NFCLoggerUI:
                 self.window["-STATUS-"].update(text_color="lime green")
             elif "入力待ち" in self._status_message:
                 self.window["-STATUS-"].update(text_color="yellow")
-            elif "記録完了" in self._status_message:
+            elif "取り外して" in self._status_message:
                 self.window["-STATUS-"].update(text_color="cyan")
             elif "タイムアウト" in self._status_message:
+                self.window["-STATUS-"].update(text_color="orange")
+            elif "記録中" in self._status_message:
                 self.window["-STATUS-"].update(text_color="orange")
 
             # Update log

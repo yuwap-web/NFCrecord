@@ -1,12 +1,20 @@
-"""Event processor coordinating NFC reads and input handling"""
+"""Event processor coordinating NFC reads and input handling.
+
+State machine:
+  IDLE → (card placed) → WAITING_INPUT → (input or timeout) → RECORDING → (card removed) → IDLE
+                                                                  ↓ (card already removed)
+                                                                IDLE
+
+One card touch = exactly one record. No duplicates.
+"""
 
 import sys
 import os
 import threading
-import queue
 import time
 from datetime import datetime
 from typing import Optional, Callable, Dict
+from enum import Enum
 
 # Fix module path for PyInstaller
 if getattr(sys, 'frozen', False):
@@ -23,8 +31,16 @@ from input_handler import InputHandlerWorker
 from sheets_api import SheetsAPIWorker
 
 
+class State(Enum):
+    IDLE = "idle"                        # Waiting for card
+    WAITING_INPUT = "waiting_input"      # Card detected, waiting for key 1/2
+    RECORDED = "recorded"                # Record saved, waiting for card removal
+    WAIT_REMOVAL = "wait_removal"        # Waiting for card to be removed
+
+
 class EventProcessor:
-    """Coordinates NFC reads, input handling, and Sheets API"""
+    """Coordinates NFC reads, input handling, and Sheets API.
+    Ensures exactly one record per card placement."""
 
     def __init__(self, credentials_file: str, callback: Optional[Callable] = None,
                  status_callback: Optional[Callable] = None):
@@ -34,12 +50,13 @@ class EventProcessor:
         self.timeout_seconds = config.get("input.timeout_seconds", 5)
         self.default_value = config.get("input.default_on_timeout", "変更あり")
 
-        # State management
-        self.pending_nfc = None
-        self.pending_timestamp = None
-        self.input_value = None
-        self.input_ready = threading.Event()
-        self._lock = threading.Lock()
+        # State machine
+        self._state = State.IDLE
+        self._state_lock = threading.Lock()
+
+        # Current session data (one card touch = one session)
+        self._session_uid = None
+        self._session_timestamp = None
         self._timeout_timer = None
 
         # Workers
@@ -47,14 +64,16 @@ class EventProcessor:
         self.input_worker = None
         self.sheets_worker = None
 
-        # Start workers
         self._start_workers()
 
     def _start_workers(self):
         """Start background worker threads"""
         try:
-            # Start NFC reader
-            self.nfc_worker = NFCReaderWorker(callback=self._on_nfc_read)
+            # Start NFC reader — uses card placed/removed callbacks
+            self.nfc_worker = NFCReaderWorker(
+                on_card_placed=self._on_card_placed,
+                on_card_removed=self._on_card_removed,
+            )
             self.nfc_worker.start()
 
             # Start input handler
@@ -78,87 +97,102 @@ class EventProcessor:
             except Exception:
                 pass
 
-    def _on_nfc_read(self, uid: str):
-        """Callback when NFC card is read"""
-        with self._lock:
-            # Cancel any existing timer
-            if self._timeout_timer:
-                self._timeout_timer.cancel()
+    def _on_card_placed(self, uid: str):
+        """Called when a card is placed on the reader (once per placement)."""
+        with self._state_lock:
+            if self._state != State.IDLE:
+                # Ignore — we're busy with a previous session
+                return
 
-            self.pending_nfc = uid
-            self.pending_timestamp = datetime.now()
-            self.input_value = None
-            self.input_ready.clear()
+            # Transition: IDLE → WAITING_INPUT
+            self._state = State.WAITING_INPUT
+            self._session_uid = uid
+            self._session_timestamp = datetime.now()
 
-        print(f"📱 NFC card detected: {uid}")
+        print(f"📱 [Session start] Card placed (UID: {uid[:8]}...)")
         self._notify_status("nfc_detected", uid)
 
         # Start timeout timer
         self._timeout_timer = threading.Timer(
-            self.timeout_seconds, self._on_input_timeout
+            self.timeout_seconds, self._on_timeout
         )
         self._timeout_timer.daemon = True
         self._timeout_timer.start()
 
-    def _on_input(self, value: str):
-        """Callback when input (Stream Deck or keyboard) is received"""
-        with self._lock:
-            if self.pending_nfc is None:
-                return  # No pending NFC read
+    def _on_card_removed(self):
+        """Called when the card is removed from the reader."""
+        with self._state_lock:
+            if self._state == State.WAIT_REMOVAL:
+                # Was waiting for removal → cycle complete
+                self._state = State.IDLE
+                self._session_uid = None
+                self._session_timestamp = None
+                print("📱 [Session end] Card removed → ready for next")
+                self._notify_status("waiting")
+            elif self._state == State.RECORDED:
+                # Record was already saved, card removed → done
+                self._state = State.IDLE
+                self._session_uid = None
+                self._session_timestamp = None
+                print("📱 [Session end] Card removed → ready for next")
+                self._notify_status("waiting")
+            elif self._state == State.WAITING_INPUT:
+                # Card removed while waiting for input — still process with timeout/default
+                # Don't change state, let the timeout or input handle it
+                print("📱 Card removed while waiting for input")
 
-            # Cancel timeout timer
+    def _on_input(self, value: str):
+        """Called when keyboard input (1 or 2) is received."""
+        with self._state_lock:
+            if self._state != State.WAITING_INPUT:
+                return  # Ignore input when not waiting
+
+            # Cancel timeout
             if self._timeout_timer:
                 self._timeout_timer.cancel()
 
-            self.input_value = value
-            self.input_ready.set()
+            print(f"⌨ Input received: {value}")
+            self._notify_status("input_received")
 
-        print(f"⌨ Input received: {value}")
-        self._notify_status("input_received")
+            # Record the event
+            self._record_and_transition(value)
 
-    def _on_input_timeout(self):
-        """Handle input timeout - use default value"""
-        with self._lock:
-            if self.pending_nfc is None:
+    def _on_timeout(self):
+        """Called when input timeout expires."""
+        with self._state_lock:
+            if self._state != State.WAITING_INPUT:
                 return  # Already processed
 
-            if not self.input_ready.is_set():
-                self.input_value = self.default_value
-                print(f"⏱ Input timeout - using default: {self.default_value}")
-                self._notify_status("timeout")
+            print(f"⏱ Input timeout → using default: {self.default_value}")
+            self._notify_status("timeout")
 
-            self.input_ready.set()
+            # Record with default value
+            self._record_and_transition(self.default_value)
 
-    def _process_nfc(self):
-        """Main processing loop for NFC events"""
-        while True:
-            with self._lock:
-                if self.pending_nfc is None or not self.input_ready.is_set():
-                    pass  # Nothing to process yet
-                else:
-                    # Process the pending NFC + input
-                    nfc_uid = self.pending_nfc
-                    timestamp = self.pending_timestamp
-                    input_value = self.input_value or self.default_value
+    def _record_and_transition(self, input_value: str):
+        """Record event to Sheets and transition state.
+        MUST be called while holding _state_lock."""
+        uid = self._session_uid
+        timestamp = self._session_timestamp
 
-                    # Reset pending state
-                    self.pending_nfc = None
-                    self.pending_timestamp = None
-                    self.input_value = None
-                    self.input_ready.clear()
+        if not uid or not timestamp:
+            self._state = State.IDLE
+            return
 
-                    # Do the actual work outside the lock
-                    self._record_event(nfc_uid, timestamp, input_value)
-
-            time.sleep(0.1)
-
-    def _record_event(self, nfc_uid: str, timestamp, input_value: str):
-        """Record a completed event to Sheets and notify UI"""
-        # Format timestamp
+        # Format data
         timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
         content = "処方箋内容について確認"
 
-        # Add to Sheets queue
+        # Check if card is still present
+        if self.nfc_worker and self.nfc_worker.card_present:
+            self._state = State.WAIT_REMOVAL
+        else:
+            # Card already removed, go directly to IDLE
+            self._state = State.IDLE
+            self._session_uid = None
+            self._session_timestamp = None
+
+        # Queue the Sheets write (outside lock is OK — thread-safe queue)
         if self.sheets_worker:
             self.sheets_worker.add_row(
                 timestamp=timestamp_str,
@@ -167,16 +201,21 @@ class EventProcessor:
                 notes="",
             )
 
-        # Notify UI callback
+        # Notify UI
         if self.ui_callback:
-            self.ui_callback(
-                {
-                    "nfc_uid": nfc_uid,
-                    "timestamp": timestamp_str,
-                    "content": content,
-                    "change": input_value,
-                }
-            )
+            self.ui_callback({
+                "nfc_uid": uid,
+                "timestamp": timestamp_str,
+                "content": content,
+                "change": input_value,
+            })
+
+        print(f"✓ [Recorded] {timestamp_str} | {input_value} | UID: {uid[:8]}...")
+
+        if self._state == State.WAIT_REMOVAL:
+            self._notify_status("wait_removal")
+        else:
+            self._notify_status("waiting")
 
     def get_status(self) -> Dict[str, str]:
         """Get current status of all components"""
@@ -184,6 +223,7 @@ class EventProcessor:
             "nfc": self.nfc_worker.reader.get_status()
             if self.nfc_worker
             else "✗ Not initialized",
+            "state": self._state.value,
         }
 
         if self.input_worker:
@@ -192,9 +232,9 @@ class EventProcessor:
         return status
 
     def start(self):
-        """Start the main processing loop"""
-        processing_thread = threading.Thread(target=self._process_nfc, daemon=True)
-        processing_thread.start()
+        """Start the event processor (no separate processing thread needed)"""
+        # All processing is event-driven via callbacks now
+        pass
 
     def stop(self):
         """Stop all workers"""

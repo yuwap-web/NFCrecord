@@ -24,16 +24,6 @@ except ImportError:
 
 from config import config
 
-# Known "normal" errors that mean no card is present
-_NORMAL_ERRORS = [
-    "Card not present",
-    "カードが取り出されました",
-    "0x80100069",  # SCARD_W_REMOVED_CARD
-    "0x80100066",  # SCARD_W_UNPOWERED_CARD
-    "0x80100009",  # SCARD_E_UNKNOWN_READER
-    "REMOVED",
-]
-
 
 class NFCReader:
     """SONY RC-380 NFC Reader interface"""
@@ -67,8 +57,12 @@ class NFCReader:
             print(f"✗ Error initializing NFC reader: {e}")
             return False
 
-    def read_card(self) -> Optional[str]:
-        """Read NFC card UID (non-blocking). Returns UID string or None."""
+    def is_card_present(self) -> Optional[str]:
+        """Check if a card is on the reader.
+        Returns UID string if card present, None if not.
+        For FeliCa cards, UID may differ each read — that's OK,
+        we only use this to detect presence/absence.
+        """
         if not HAS_SMARTCARD or not self._initialized:
             return None
 
@@ -93,14 +87,8 @@ class NFCReader:
 
                 return None
 
-        except Exception as e:
-            # Check if this is a normal "no card" situation
-            error_str = str(e)
-            for pattern in _NORMAL_ERRORS:
-                if pattern in error_str:
-                    return None  # Silently return None — card not present
-            # Only log truly unexpected errors
-            print(f"NFC read error (unexpected): {e}")
+        except Exception:
+            # Any error means card is not (properly) present
             return None
 
     def get_status(self) -> str:
@@ -123,39 +111,45 @@ class NFCReader:
 
 
 class NFCReaderWorker(threading.Thread):
-    """Background worker thread for NFC reading"""
+    """Background worker thread for NFC reading.
 
-    def __init__(self, callback: Optional[Callable] = None):
+    Uses state-based detection:
+    - Detects card PRESENT (first successful read after absence)
+    - Detects card REMOVED (first failed read after presence)
+    - Only triggers callback ONCE per card placement
+    """
+
+    def __init__(self, on_card_placed: Optional[Callable] = None,
+                 on_card_removed: Optional[Callable] = None):
         super().__init__(daemon=True)
         self.reader = NFCReader()
-        self.callback = callback
+        self.on_card_placed = on_card_placed
+        self.on_card_removed = on_card_removed
         self.running = True
-        self.last_uid = None
         self.card_present = False
         self.poll_interval = config.get("nfc.poll_interval", 0.5)
 
     def run(self):
-        """Main reader loop"""
+        """Main reader loop — state-based card detection"""
         print(f"NFC Reader worker started (poll interval: {self.poll_interval}s)")
 
         while self.running:
             try:
-                uid = self.reader.read_card()
+                uid = self.reader.is_card_present()
 
-                if uid:
-                    # Card is present
-                    if not self.card_present or uid != self.last_uid:
-                        # New card detected (or different card)
-                        self.card_present = True
-                        self.last_uid = uid
-                        if self.callback:
-                            self.callback(uid)
-                else:
-                    # No card present
-                    if self.card_present:
-                        # Card was just removed
-                        self.card_present = False
-                        self.last_uid = None
+                if uid and not self.card_present:
+                    # Card just placed on reader
+                    self.card_present = True
+                    print(f"📱 NFC card detected (UID: {uid[:8]}...)")
+                    if self.on_card_placed:
+                        self.on_card_placed(uid)
+
+                elif not uid and self.card_present:
+                    # Card just removed from reader
+                    self.card_present = False
+                    print("📱 NFC card removed")
+                    if self.on_card_removed:
+                        self.on_card_removed()
 
                 time.sleep(self.poll_interval)
 
