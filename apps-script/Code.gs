@@ -1,25 +1,38 @@
 /**
- * NFC Sheets Logger - Apps Script Backend
+ * NFC Sheets Logger - Apps Script Backend (API モード)
  *
- * スプレッドシートに紐づけてデプロイする。
- * Android Chrome の Web NFC API と連携し、
- * NFC タッチ → ボタン選択 → スプレッドシート記録 を実現する。
+ * フロントエンドは GitHub Pages でホスティング。
+ * この Apps Script は API エンドポイントとしてのみ機能する。
+ *
+ * デプロイ設定:
+ *   - 次のユーザーとして実行: 自分
+ *   - アクセスできるユーザー: 全員
  */
 
 /**
- * Web アプリのエントリーポイント
- * index.html を返す
+ * GET リクエストハンドラ
+ * ?action=record&changeStatus=...&notes=... でスプレッドシートに記録
  */
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('NFC Sheets Logger')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+function doGet(e) {
+  // action=record: スプレッドシートに記録
+  if (e && e.parameter && e.parameter.action === 'record') {
+    var result = appendRecord(
+      e.parameter.changeStatus || '',
+      e.parameter.notes || ''
+    );
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // パラメータなし: 使い方を表示
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'ok',
+    usage: 'GET ?action=record&changeStatus=変更あり&notes=備考'
+  })).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
  * スプレッドシートに1行追加する
- * フロントエンド（index.html）から google.script.run 経由で呼ばれる
  *
  * @param {string} changeStatus - 変更の有無（"変更あり", "変更なし", "疑義照会"）
  * @param {string} notes - 備考（患者番号など）

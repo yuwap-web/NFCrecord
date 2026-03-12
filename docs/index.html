@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📱</text></svg>">
+  <title>NFC Logger</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      background: #16213e;
+      padding: 16px;
+      text-align: center;
+      border-bottom: 2px solid #0f3460;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e94560;
+    }
+
+    /* ===== Status Bar ===== */
+    .status-bar {
+      padding: 14px 16px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background 0.3s;
+    }
+
+    .status-idle       { background: #0f3460; color: #53cf7e; }
+    .status-detected   { background: #533483; color: #ffd700; }
+    .status-patient    { background: #4a2c6e; color: #ff9f43; }
+    .status-recording  { background: #1e5128; color: #7fff7f; }
+    .status-success    { background: #1b4332; color: #52b788; }
+    .status-timeout    { background: #5c3d1a; color: #ffb347; }
+    .status-error      { background: #641220; color: #ff6b6b; }
+
+    /* ===== Main Content ===== */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    /* ===== NFC Icon ===== */
+    .nfc-icon {
+      font-size: 80px;
+      line-height: 1;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .nfc-icon.detected {
+      animation: bounce 0.5s ease;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50%      { opacity: 1;   transform: scale(1.05); }
+    }
+
+    @keyframes bounce {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+
+    /* ===== Start Button ===== */
+    .btn-start {
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 16px;
+      padding: 18px 48px;
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+    }
+
+    .btn-start:active {
+      transform: scale(0.95);
+      opacity: 0.8;
+    }
+
+    .btn-start:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    /* ===== Input Buttons ===== */
+    .input-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .btn-input {
+      border: none;
+      border-radius: 14px;
+      padding: 22px 16px;
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s;
+      text-align: center;
+    }
+
+    .btn-input:active {
+      transform: scale(0.97);
+    }
+
+    .btn-henkou-ari {
+      background: #2196F3;
+      color: white;
+    }
+
+    .btn-henkou-nashi {
+      background: #4CAF50;
+      color: white;
+    }
+
+    .btn-gigi {
+      background: #FF9800;
+      color: white;
+    }
+
+    /* ===== Patient Number Input ===== */
+    .patient-input-area {
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .patient-input-area label {
+      font-size: 16px;
+      color: #ccc;
+    }
+
+    .patient-input-area input {
+      background: #2a2a4a;
+      border: 2px solid #0f3460;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 24px;
+      color: #eee;
+      text-align: center;
+      outline: none;
+    }
+
+    .patient-input-area input:focus {
+      border-color: #e94560;
+    }
+
+    .btn-submit-patient {
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-skip-patient {
+      background: #555;
+      color: #ccc;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    /* ===== Timer ===== */
+    .timer {
+      font-size: 48px;
+      font-weight: 700;
+      color: #ffd700;
+    }
+
+    /* ===== Setup Screen ===== */
+    .setup-area {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .setup-area label {
+      font-size: 14px;
+      color: #aaa;
+    }
+
+    .setup-area input {
+      background: #2a2a4a;
+      border: 2px solid #0f3460;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      color: #eee;
+      outline: none;
+      width: 100%;
+    }
+
+    .setup-area input:focus {
+      border-color: #e94560;
+    }
+
+    .btn-save {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ===== Log ===== */
+    .log-area {
+      background: #16213e;
+      border-top: 2px solid #0f3460;
+      padding: 12px 16px;
+      max-height: 140px;
+      overflow-y: auto;
+      font-size: 12px;
+      color: #8899aa;
+      line-height: 1.6;
+    }
+
+    .log-entry {
+      border-bottom: 1px solid #1a2744;
+      padding: 2px 0;
+    }
+
+    .log-success { color: #52b788; }
+    .log-error   { color: #ff6b6b; }
+
+    /* ===== Not Supported ===== */
+    .not-supported {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .not-supported h2 {
+      color: #ff6b6b;
+      margin-bottom: 16px;
+    }
+
+    .not-supported p {
+      color: #aaa;
+      line-height: 1.8;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>NFC Sheets Logger</h1>
+  </div>
+
+  <!-- Status Bar -->
+  <div id="statusBar" class="status-bar status-idle">
+    初期設定を確認中...
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+
+    <!-- Screen: Not Supported -->
+    <div id="screenNotSupported" class="not-supported hidden">
+      <h2>Web NFC 非対応</h2>
+      <p>
+        この機能は Android の Chrome ブラウザが必要です。<br>
+        iOS / PC では Web NFC を利用できません。
+      </p>
+    </div>
+
+    <!-- Screen: Setup (初回のみ) -->
+    <div id="screenSetup" class="hidden">
+      <div class="setup-area">
+        <h2 style="color:#e94560; text-align:center; margin-bottom:8px;">初期設定</h2>
+        <label>Apps Script Web アプリの URL を貼り付けてください：</label>
+        <input type="url" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec" autocomplete="off">
+        <button class="btn-save" onclick="saveScriptUrl()">保存して開始</button>
+        <p style="font-size:12px; color:#666; margin-top:8px;">
+          ※ URL はこのブラウザに保存されます。<br>
+          ※ Apps Script のデプロイ設定で「全員」にアクセスを許可してください。
+        </p>
+      </div>
+    </div>
+
+    <!-- Screen: Start -->
+    <div id="screenStart" class="hidden">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:24px;">
+        <div class="nfc-icon">📡</div>
+        <button class="btn-start" id="btnStart" onclick="startScan()">
+          NFC スキャン開始
+        </button>
+        <p style="color:#555; font-size:12px; cursor:pointer; text-decoration:underline;" onclick="showSetup()">
+          URL を変更する
+        </p>
+      </div>
+    </div>
+
+    <!-- Screen: Scanning (Idle) -->
+    <div id="screenScanning" class="hidden">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+        <div class="nfc-icon" id="nfcIcon">📡</div>
+        <p style="color:#8899aa; font-size:14px;">受話器の NFC タグにかざしてください</p>
+      </div>
+    </div>
+
+    <!-- Screen: Input Buttons -->
+    <div id="screenInput" class="hidden">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+        <div class="timer" id="timerDisplay">5</div>
+        <div class="input-buttons">
+          <button class="btn-input btn-henkou-ari" onclick="selectInput('変更あり')">
+            1. 変更あり
+          </button>
+          <button class="btn-input btn-henkou-nashi" onclick="selectInput('変更なし')">
+            2. 変更なし
+          </button>
+          <button class="btn-input btn-gigi" onclick="selectInput('疑義照会')">
+            3. 疑義照会
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen: Patient Number -->
+    <div id="screenPatient" class="hidden">
+      <div class="patient-input-area">
+        <label>患者番号を入力してください：</label>
+        <input type="text" id="patientNumberInput" inputmode="numeric" placeholder="例: 12345" autocomplete="off">
+        <button class="btn-submit-patient" onclick="submitPatientNumber()">
+          送信
+        </button>
+        <button class="btn-skip-patient" onclick="submitPatientNumber(true)">
+          スキップ（番号なし）
+        </button>
+      </div>
+    </div>
+
+    <!-- Screen: Recording -->
+    <div id="screenRecording" class="hidden">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+        <div style="font-size:60px;">⏳</div>
+        <p>記録中...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Log Area -->
+  <div class="log-area" id="logArea"></div>
+
+  <script>
+    // ===== Configuration =====
+    const STORAGE_KEY = 'nfc_logger_script_url';
+    const TIMEOUT_SEC = 5;
+    const COOLDOWN_MS = 2000;
+    const DEFAULT_ON_TIMEOUT = '変更あり';
+
+    let SCRIPT_URL = localStorage.getItem(STORAGE_KEY) || '';
+
+    // ===== State Machine =====
+    const State = {
+      SETUP:         'setup',
+      READY:         'ready',
+      SCANNING:      'scanning',
+      WAITING_INPUT: 'waiting_input',
+      PATIENT_NUM:   'patient_num',
+      RECORDING:     'recording',
+      COOLDOWN:      'cooldown',
+    };
+
+    let currentState = State.SETUP;
+    let ndefReader = null;
+    let countdownTimer = null;
+    let countdown = TIMEOUT_SEC;
+
+    // ===== Screen Management =====
+    const screens = [
+      'screenNotSupported', 'screenSetup', 'screenStart',
+      'screenScanning', 'screenInput', 'screenPatient', 'screenRecording'
+    ];
+
+    function showScreen(id) {
+      screens.forEach(s => {
+        document.getElementById(s).classList.toggle('hidden', s !== id);
+      });
+    }
+
+    function setStatus(text, className) {
+      const bar = document.getElementById('statusBar');
+      bar.textContent = text;
+      bar.className = 'status-bar ' + className;
+    }
+
+    function addLog(text, type) {
+      const log = document.getElementById('logArea');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry' + (type ? ' log-' + type : '');
+      const now = new Date().toLocaleTimeString('ja-JP');
+      entry.textContent = now + ' ' + text;
+      log.insertBefore(entry, log.firstChild);
+      while (log.children.length > 50) {
+        log.removeChild(log.lastChild);
+      }
+    }
+
+    // ===== Setup =====
+    function showSetup() {
+      currentState = State.SETUP;
+      document.getElementById('scriptUrlInput').value = SCRIPT_URL;
+      showScreen('screenSetup');
+      setStatus('Apps Script URL を設定してください', 'status-idle');
+    }
+
+    function saveScriptUrl() {
+      const input = document.getElementById('scriptUrlInput');
+      const url = (input.value || '').trim();
+      if (!url || !url.startsWith('https://script.google.com/')) {
+        setStatus('正しい Apps Script URL を入力してください', 'status-error');
+        return;
+      }
+      SCRIPT_URL = url;
+      localStorage.setItem(STORAGE_KEY, url);
+      addLog('URL 保存完了');
+      goToReady();
+    }
+
+    function goToReady() {
+      if (!('NDEFReader' in window)) {
+        showScreen('screenNotSupported');
+        setStatus('Web NFC 非対応のブラウザです', 'status-error');
+        return;
+      }
+      currentState = State.READY;
+      showScreen('screenStart');
+      setStatus('NFC スキャンを開始してください', 'status-idle');
+    }
+
+    // ===== NFC =====
+    async function startScan() {
+      try {
+        ndefReader = new NDEFReader();
+        await ndefReader.scan();
+
+        ndefReader.addEventListener('reading', onNFCReading);
+        ndefReader.addEventListener('readingerror', () => {
+          addLog('NFC 読み取りエラー', 'error');
+        });
+
+        currentState = State.SCANNING;
+        showScreen('screenScanning');
+        setStatus('NFC 待機中... タグにかざしてください', 'status-idle');
+        addLog('NFC スキャン開始（常時待機）');
+
+      } catch (err) {
+        setStatus('NFC エラー: ' + err.message, 'status-error');
+        addLog('NFC 開始エラー: ' + err.message, 'error');
+      }
+    }
+
+    function onNFCReading(event) {
+      // スキャン中のみ受け付ける
+      if (currentState !== State.SCANNING) return;
+
+      const uid = event.serialNumber || 'unknown';
+      addLog('NFC 検出: ' + uid);
+
+      currentState = State.WAITING_INPUT;
+      showScreen('screenInput');
+      setStatus('カード検出 → 入力を選択してください', 'status-detected');
+
+      if (navigator.vibrate) navigator.vibrate(200);
+
+      const icon = document.getElementById('nfcIcon');
+      icon.classList.add('detected');
+      setTimeout(() => icon.classList.remove('detected'), 600);
+
+      startCountdown();
+    }
+
+    // ===== Countdown =====
+    function startCountdown() {
+      countdown = TIMEOUT_SEC;
+      updateTimerDisplay();
+
+      countdownTimer = setInterval(() => {
+        countdown--;
+        updateTimerDisplay();
+        if (countdown <= 0) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          onTimeout();
+        }
+      }, 1000);
+    }
+
+    function stopCountdown() {
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    }
+
+    function updateTimerDisplay() {
+      const el = document.getElementById('timerDisplay');
+      if (el) el.textContent = countdown;
+    }
+
+    function onTimeout() {
+      if (currentState !== State.WAITING_INPUT) return;
+      addLog('タイムアウト → ' + DEFAULT_ON_TIMEOUT);
+      setStatus('タイムアウト → ' + DEFAULT_ON_TIMEOUT + 'で記録', 'status-timeout');
+      recordToSheet(DEFAULT_ON_TIMEOUT, '');
+    }
+
+    // ===== Input Selection =====
+    function selectInput(value) {
+      if (currentState !== State.WAITING_INPUT) return;
+      stopCountdown();
+
+      if (value === '疑義照会') {
+        currentState = State.PATIENT_NUM;
+        showScreen('screenPatient');
+        setStatus('疑義照会 → 患者番号を入力', 'status-patient');
+        addLog('疑義照会を選択');
+        setTimeout(() => {
+          document.getElementById('patientNumberInput').focus();
+        }, 100);
+      } else {
+        addLog(value + 'を選択');
+        recordToSheet(value, '');
+      }
+    }
+
+    function submitPatientNumber(skip) {
+      if (currentState !== State.PATIENT_NUM) return;
+
+      const input = document.getElementById('patientNumberInput');
+      const patientNum = skip ? '' : (input.value || '').trim();
+      const notes = patientNum ? '患者番号: ' + patientNum : '';
+
+      input.value = '';
+      addLog('疑義照会' + (patientNum ? ' (患者番号: ' + patientNum + ')' : ' (番号なし)'));
+      recordToSheet('疑義照会', notes);
+    }
+
+    // ===== Record to Sheet =====
+    async function recordToSheet(changeStatus, notes) {
+      currentState = State.RECORDING;
+      showScreen('screenRecording');
+      setStatus('スプレッドシートに記録中...', 'status-recording');
+
+      const params = new URLSearchParams({
+        action: 'record',
+        changeStatus: changeStatus,
+        notes: notes || ''
+      });
+
+      try {
+        const response = await fetch(SCRIPT_URL + '?' + params.toString(), {
+          method: 'GET',
+          redirect: 'follow'
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          setStatus('記録完了！ (' + result.timestamp + ')', 'status-success');
+          addLog('記録完了: ' + result.timestamp, 'success');
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        } else {
+          throw new Error('記録失敗');
+        }
+      } catch (err) {
+        // fetch エラーでも送信は成功している可能性がある
+        setStatus('送信完了（確認不可）', 'status-success');
+        addLog('送信完了（レスポンス取得不可: ' + err.message + '）');
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      }
+
+      // クールダウン後にスキャン待機に戻る
+      currentState = State.COOLDOWN;
+      setTimeout(() => {
+        currentState = State.SCANNING;
+        showScreen('screenScanning');
+        setStatus('NFC 待機中... タグにかざしてください', 'status-idle');
+      }, COOLDOWN_MS);
+    }
+
+    // ===== Init =====
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!('NDEFReader' in window)) {
+        showScreen('screenNotSupported');
+        setStatus('Web NFC 非対応のブラウザです', 'status-error');
+        addLog('Web NFC 非対応');
+        return;
+      }
+
+      addLog('アプリ起動');
+
+      if (SCRIPT_URL) {
+        goToReady();
+      } else {
+        showSetup();
+      }
+    });
+  </script>
+
+</body>
+</html>
