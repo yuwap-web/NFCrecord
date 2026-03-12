@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📱</text></svg>">
-  <title>NFC Logger</title>
+  <title>雄和薬局問い合わせロガー</title>
   <style>
     * {
       box-sizing: border-box;
@@ -18,8 +18,8 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
-      background: #1a1a2e;
-      color: #eee;
+      background: #f5f7fa;
+      color: #333;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -29,16 +29,17 @@
 
     /* ===== Header ===== */
     .header {
-      background: #16213e;
+      background: #ffffff;
       padding: 16px;
       text-align: center;
-      border-bottom: 2px solid #0f3460;
+      border-bottom: 2px solid #e0e6ed;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
 
     .header h1 {
       font-size: 18px;
-      font-weight: 600;
-      color: #e94560;
+      font-weight: 700;
+      color: #2c7a51;
     }
 
     /* ===== Status Bar ===== */
@@ -50,13 +51,13 @@
       transition: background 0.3s;
     }
 
-    .status-idle       { background: #0f3460; color: #53cf7e; }
-    .status-detected   { background: #533483; color: #ffd700; }
-    .status-patient    { background: #4a2c6e; color: #ff9f43; }
-    .status-recording  { background: #1e5128; color: #7fff7f; }
-    .status-success    { background: #1b4332; color: #52b788; }
-    .status-timeout    { background: #5c3d1a; color: #ffb347; }
-    .status-error      { background: #641220; color: #ff6b6b; }
+    .status-idle       { background: #e8f5e9; color: #2e7d32; }
+    .status-detected   { background: #fff8e1; color: #f57f17; }
+    .status-patient    { background: #fff3e0; color: #e65100; }
+    .status-recording  { background: #e3f2fd; color: #1565c0; }
+    .status-success    { background: #e8f5e9; color: #1b5e20; }
+    .status-timeout    { background: #fff8e1; color: #e65100; }
+    .status-error      { background: #ffebee; color: #c62828; }
 
     /* ===== Main Content ===== */
     .main {
@@ -93,7 +94,7 @@
 
     /* ===== Start Button ===== */
     .btn-start {
-      background: #e94560;
+      background: #2c7a51;
       color: white;
       border: none;
       border-radius: 16px;
@@ -102,6 +103,7 @@
       font-weight: 700;
       cursor: pointer;
       transition: transform 0.1s, opacity 0.1s;
+      box-shadow: 0 2px 8px rgba(44,122,81,0.3);
     }
 
     .btn-start:active {
@@ -110,8 +112,9 @@
     }
 
     .btn-start:disabled {
-      background: #555;
+      background: #bbb;
       cursor: not-allowed;
+      box-shadow: none;
     }
 
     /* ===== Input Buttons ===== */
@@ -141,16 +144,19 @@
     .btn-henkou-ari {
       background: #2196F3;
       color: white;
+      box-shadow: 0 2px 6px rgba(33,150,243,0.3);
     }
 
     .btn-henkou-nashi {
       background: #4CAF50;
       color: white;
+      box-shadow: 0 2px 6px rgba(76,175,80,0.3);
     }
 
     .btn-gigi {
       background: #FF9800;
       color: white;
+      box-shadow: 0 2px 6px rgba(255,152,0,0.3);
     }
 
     /* ===== Patient Number Input ===== */
@@ -164,26 +170,26 @@
 
     .patient-input-area label {
       font-size: 16px;
-      color: #ccc;
+      color: #555;
     }
 
     .patient-input-area input {
-      background: #2a2a4a;
-      border: 2px solid #0f3460;
+      background: #ffffff;
+      border: 2px solid #d0d7de;
       border-radius: 12px;
       padding: 16px;
       font-size: 24px;
-      color: #eee;
+      color: #333;
       text-align: center;
       outline: none;
     }
 
     .patient-input-area input:focus {
-      border-color: #e94560;
+      border-color: #2c7a51;
     }
 
     .btn-submit-patient {
-      background: #e94560;
+      background: #2c7a51;
       color: white;
       border: none;
       border-radius: 12px;
@@ -191,11 +197,12 @@
       font-size: 18px;
       font-weight: 700;
       cursor: pointer;
+      box-shadow: 0 2px 6px rgba(44,122,81,0.3);
     }
 
     .btn-skip-patient {
-      background: #555;
-      color: #ccc;
+      background: #e0e6ed;
+      color: #666;
       border: none;
       border-radius: 12px;
       padding: 14px;
@@ -207,7 +214,7 @@
     .timer {
       font-size: 48px;
       font-weight: 700;
-      color: #ffd700;
+      color: #e65100;
     }
 
     /* ===== Setup Screen ===== */
@@ -221,26 +228,26 @@
 
     .setup-area label {
       font-size: 14px;
-      color: #aaa;
+      color: #666;
     }
 
     .setup-area input {
-      background: #2a2a4a;
-      border: 2px solid #0f3460;
+      background: #ffffff;
+      border: 2px solid #d0d7de;
       border-radius: 10px;
       padding: 12px;
       font-size: 13px;
-      color: #eee;
+      color: #333;
       outline: none;
       width: 100%;
     }
 
     .setup-area input:focus {
-      border-color: #e94560;
+      border-color: #2c7a51;
     }
 
     .btn-save {
-      background: #4CAF50;
+      background: #2c7a51;
       color: white;
       border: none;
       border-radius: 10px;
@@ -248,27 +255,28 @@
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
+      box-shadow: 0 2px 6px rgba(44,122,81,0.3);
     }
 
     /* ===== Log ===== */
     .log-area {
-      background: #16213e;
-      border-top: 2px solid #0f3460;
+      background: #ffffff;
+      border-top: 2px solid #e0e6ed;
       padding: 12px 16px;
       max-height: 140px;
       overflow-y: auto;
       font-size: 12px;
-      color: #8899aa;
+      color: #888;
       line-height: 1.6;
     }
 
     .log-entry {
-      border-bottom: 1px solid #1a2744;
+      border-bottom: 1px solid #f0f2f5;
       padding: 2px 0;
     }
 
-    .log-success { color: #52b788; }
-    .log-error   { color: #ff6b6b; }
+    .log-success { color: #2e7d32; }
+    .log-error   { color: #c62828; }
 
     /* ===== Not Supported ===== */
     .not-supported {
@@ -277,12 +285,12 @@
     }
 
     .not-supported h2 {
-      color: #ff6b6b;
+      color: #c62828;
       margin-bottom: 16px;
     }
 
     .not-supported p {
-      color: #aaa;
+      color: #666;
       line-height: 1.8;
     }
 
@@ -293,7 +301,7 @@
 
   <!-- Header -->
   <div class="header">
-    <h1>NFC Sheets Logger</h1>
+    <h1>雄和薬局問い合わせロガー</h1>
   </div>
 
   <!-- Status Bar -->
@@ -316,11 +324,11 @@
     <!-- Screen: Setup (初回のみ) -->
     <div id="screenSetup" class="hidden">
       <div class="setup-area">
-        <h2 style="color:#e94560; text-align:center; margin-bottom:8px;">初期設定</h2>
+        <h2 style="color:#2c7a51; text-align:center; margin-bottom:8px;">初期設定</h2>
         <label>Apps Script Web アプリの URL を貼り付けてください：</label>
         <input type="url" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec" autocomplete="off">
         <button class="btn-save" onclick="saveScriptUrl()">保存して開始</button>
-        <p style="font-size:12px; color:#666; margin-top:8px;">
+        <p style="font-size:12px; color:#999; margin-top:8px;">
           ※ URL はこのブラウザに保存されます。<br>
           ※ Apps Script のデプロイ設定で「全員」にアクセスを許可してください。
         </p>
@@ -334,7 +342,7 @@
         <button class="btn-start" id="btnStart" onclick="startScan()">
           NFC スキャン開始
         </button>
-        <p style="color:#555; font-size:12px; cursor:pointer; text-decoration:underline;" onclick="showSetup()">
+        <p style="color:#999; font-size:12px; cursor:pointer; text-decoration:underline;" onclick="showSetup()">
           URL を変更する
         </p>
       </div>
@@ -344,7 +352,7 @@
     <div id="screenScanning" class="hidden">
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
         <div class="nfc-icon" id="nfcIcon">📡</div>
-        <p style="color:#8899aa; font-size:14px;">受話器の NFC タグにかざしてください</p>
+        <p style="color:#888; font-size:14px;">受話器の NFC タグにかざしてください</p>
       </div>
     </div>
 
@@ -384,7 +392,7 @@
     <div id="screenRecording" class="hidden">
       <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
         <div style="font-size:60px;">⏳</div>
-        <p>記録中...</p>
+        <p style="color:#555;">記録中...</p>
       </div>
     </div>
 
