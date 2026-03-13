@@ -35,15 +35,19 @@ if exist "%STARTUP_DIR%\%SHORTCUT_NAME%" (
     exit /b 0
 )
 
-:: PowerShell でショートカットを作成
+:: PowerShell でショートカットを作成（管理者として実行フラグ付き）
 echo スタートアップフォルダにショートカットを作成しています...
+echo （keyboard ライブラリに管理者権限が必要なため、管理者として実行します）
 powershell -Command ^
     "$ws = New-Object -ComObject WScript.Shell; ^
      $sc = $ws.CreateShortcut('%STARTUP_DIR%\%SHORTCUT_NAME%'); ^
      $sc.TargetPath = '%EXE_PATH%'; ^
      $sc.WorkingDirectory = '%APP_DIR%'; ^
      $sc.Description = 'NFC Sheets Logger'; ^
-     $sc.Save()"
+     $sc.Save(); ^
+     $bytes = [System.IO.File]::ReadAllBytes('%STARTUP_DIR%\%SHORTCUT_NAME%'); ^
+     $bytes[0x15] = $bytes[0x15] -bor 0x20; ^
+     [System.IO.File]::WriteAllBytes('%STARTUP_DIR%\%SHORTCUT_NAME%', $bytes)"
 
 if %ERRORLEVEL% neq 0 (
     echo [エラー] ショートカットの作成に失敗しました。
