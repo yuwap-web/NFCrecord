@@ -514,10 +514,19 @@
       }
     }
 
-    // ページが再表示されたら Wake Lock を再取得
+    // ページが再表示されたら Wake Lock と NFC スキャンを再取得
     document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible' && currentState === State.SCANNING) {
-        await requestWakeLock();
+      if (document.visibilityState === 'visible') {
+        if (currentState === State.SCANNING || currentState === State.COOLDOWN) {
+          await requestWakeLock();
+          // NFC スキャンが切れている場合は再開
+          if (ndefReader) {
+            try {
+              await ndefReader.scan();
+              addLog('NFC スキャン再開（ページ復帰）');
+            } catch (e) { /* already scanning */ }
+          }
+        }
       }
     });
 
@@ -525,12 +534,14 @@
     async function startScan() {
       try {
         ndefReader = new NDEFReader();
-        await ndefReader.scan();
 
+        // イベントリスナーを scan() の前に登録（タイミング問題を防止）
         ndefReader.addEventListener('reading', onNFCReading);
         ndefReader.addEventListener('readingerror', () => {
           addLog('NFC 読み取りエラー', 'error');
         });
+
+        await ndefReader.scan();
 
         currentState = State.SCANNING;
         showScreen('screenScanning');
@@ -543,6 +554,11 @@
       } catch (err) {
         setStatus('NFC エラー: ' + err.message, 'status-error');
         addLog('NFC 開始エラー: ' + err.message, 'error');
+
+        // 権限エラーの場合は具体的なメッセージ
+        if (err.name === 'NotAllowedError') {
+          addLog('Chrome の NFC 権限を許可してください', 'error');
+        }
       }
     }
 
