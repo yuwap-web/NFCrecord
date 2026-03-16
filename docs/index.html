@@ -533,15 +533,25 @@
     // ===== NFC =====
     async function startScan() {
       try {
+        addLog('[DEBUG] NDEFReader クラス確認: ' + ('NDEFReader' in window), 'error');
+
         ndefReader = new NDEFReader();
+        addLog('[DEBUG] NDEFReader インスタンス作成成功');
 
         // イベントリスナーを scan() の前に登録（タイミング問題を防止）
-        ndefReader.addEventListener('reading', onNFCReading);
-        ndefReader.addEventListener('readingerror', () => {
+        ndefReader.addEventListener('reading', (event) => {
+          addLog('[DEBUG] reading イベント発火');
+          onNFCReading(event);
+        });
+        ndefReader.addEventListener('readingerror', (err) => {
+          addLog('[DEBUG] readingerror イベント: ' + err.message, 'error');
           addLog('NFC 読み取りエラー', 'error');
         });
+        addLog('[DEBUG] イベントリスナー登録完了');
 
+        addLog('[DEBUG] scan() を実行中...');
         await ndefReader.scan();
+        addLog('[DEBUG] scan() 実行成功');
 
         currentState = State.SCANNING;
         showScreen('screenScanning');
@@ -552,21 +562,43 @@
         await requestWakeLock();
 
       } catch (err) {
+        addLog('[DEBUG] エラー発生: ' + err.name + ' - ' + err.message, 'error');
         setStatus('NFC エラー: ' + err.message, 'status-error');
         addLog('NFC 開始エラー: ' + err.message, 'error');
 
         // 権限エラーの場合は具体的なメッセージ
         if (err.name === 'NotAllowedError') {
           addLog('Chrome の NFC 権限を許可してください', 'error');
+        } else if (err.name === 'SecurityError') {
+          addLog('セキュリティエラー：HTTPS環境が必要です', 'error');
+        } else if (err.name === 'NotSupportedError') {
+          addLog('このブラウザ・デバイスは Web NFC に非対応です', 'error');
         }
       }
     }
 
     function onNFCReading(event) {
+      addLog('[DEBUG] onNFCReading 関数実行: currentState=' + currentState);
+
       // スキャン中のみ受け付ける
-      if (currentState !== State.SCANNING) return;
+      if (currentState !== State.SCANNING) {
+        addLog('[DEBUG] スキャン中ではない状態のため処理をスキップ', 'error');
+        return;
+      }
 
       const uid = event.serialNumber || 'unknown';
+      addLog('[DEBUG] serialNumber: ' + uid);
+
+      // NDEF メッセージの詳細を記録
+      if (event.message) {
+        addLog('[DEBUG] NDEF メッセージ検出: ' + event.message.records.length + ' 件のレコード');
+        event.message.records.forEach((record, idx) => {
+          addLog('[DEBUG]   Record ' + idx + ': type=' + record.recordType);
+        });
+      } else {
+        addLog('[DEBUG] NDEF メッセージなし');
+      }
+
       addLog('NFC 検出: ' + uid);
 
       currentState = State.WAITING_INPUT;
@@ -692,6 +724,14 @@
 
     // ===== Init =====
     window.addEventListener('DOMContentLoaded', () => {
+      // 起動確認用アラート（一度だけ表示）
+      alert('アプリ起動: Web NFC対応=' + ('NDEFReader' in window));
+
+      addLog('[DEBUG] DOMContentLoaded イベント発火');
+      addLog('[DEBUG] NDEFReader 対応: ' + ('NDEFReader' in window));
+      addLog('[DEBUG] wakeLock 対応: ' + ('wakeLock' in navigator));
+      addLog('[DEBUG] vibrate 対応: ' + (navigator.vibrate !== undefined));
+
       if (!('NDEFReader' in window)) {
         showScreen('screenNotSupported');
         setStatus('Web NFC 非対応のブラウザです', 'status-error');
@@ -702,8 +742,10 @@
       addLog('アプリ起動');
 
       if (SCRIPT_URL) {
+        addLog('[DEBUG] SCRIPT_URL 設定済み: ' + SCRIPT_URL);
         goToReady();
       } else {
+        addLog('[DEBUG] SCRIPT_URL 未設定 → セットアップ画面へ');
         showSetup();
       }
     });
