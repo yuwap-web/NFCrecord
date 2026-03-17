@@ -128,4 +128,5 @@ dmypy.json
 
 # Project specific
 config/credentials.json
+config.zip
 .env.local
