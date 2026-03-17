@@ -96,7 +96,7 @@ https://yuwap-web.github.io/NFCrecord/
 |------|------|
 | スマホ | Android（NFC 搭載） |
 | ブラウザ | Chrome 89 以上 |
-| NFC タグ | NDEF 対応の汎用 NFC タグ（NTAG213 等） |
+| NFC タグ | 汎用 NFC タグ（NTAG213 等）— 新品でそのまま利用可能 |
 
 > iOS の Safari は Web NFC 非対応です。Android Chrome のみです。
 

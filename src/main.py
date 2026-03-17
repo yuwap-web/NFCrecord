@@ -72,6 +72,7 @@ class NFCLoggerUI:
         self._status_message = "起動中..."
         self._pending_uid = None
         self._show_patient_dialog = False
+        self._patient_number = None
 
     def initialize(self) -> bool:
         """Initialize the UI and event processor"""
@@ -161,6 +162,8 @@ class NFCLoggerUI:
         """Callback for status changes from event processor"""
         if status == "nfc_detected":
             self._status_message = "📱 カード検出 → 入力待ち (1:変更あり / 2:変更なし / 3:疑義照会)"
+            if self.window:
+                self.window.bring_to_front()
         elif status == "waiting":
             self._status_message = "カード待機中..."
         elif status == "timeout":
@@ -255,8 +258,23 @@ class NFCLoggerUI:
                     default_text="",
                     font=("Arial", 12),
                 )
-                # patient_number is None if cancelled, "" if empty, or the entered text
-                self.processor.submit_patient_number(patient_number or "")
+                self._patient_number = patient_number or ""
+
+                # 備考テキストの入力ダイアログ
+                notes = sg.popup_get_text(
+                    "備考を入力してください（任意）:",
+                    title="疑義照会 — 備考入力",
+                    default_text="",
+                    font=("Arial", 12),
+                )
+                notes = notes or ""
+
+                # 患者番号と備考を組み合わせて送信
+                self.processor.submit_patient_number_with_notes(
+                    patient_number=self._patient_number,
+                    notes=notes
+                )
+                self._patient_number = None
 
             # Update display every 300ms
             self.update_display()
