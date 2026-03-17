@@ -380,6 +380,8 @@
       <div class="patient-input-area">
         <label>患者番号を入力してください：</label>
         <input type="text" id="patientNumberInput" inputmode="numeric" placeholder="例: 12345" autocomplete="off">
+        <label style="margin-top: 16px;">備考（任意）：</label>
+        <textarea id="notesInput" placeholder="追加情報があればご記入ください" autocomplete="off" style="padding: 12px; font-size: 16px; border: 2px solid #d0d7de; border-radius: 12px; font-family: inherit; resize: vertical; min-height: 80px;"></textarea>
         <button class="btn-submit-patient" onclick="submitPatientNumber()">
           送信
         </button>
@@ -644,11 +646,20 @@
       if (currentState !== State.PATIENT_NUM) return;
 
       const input = document.getElementById('patientNumberInput');
+      const notesInput = document.getElementById('notesInput');
       const patientNum = skip ? '' : (input.value || '').trim();
-      const notes = patientNum ? '患者番号: ' + patientNum : '';
+      const customNotes = (notesInput.value || '').trim();
+
+      // 備考を構築：患者番号があれば含める、備考テキストがあれば含める
+      let notes = '';
+      if (patientNum) notes = '患者番号: ' + patientNum;
+      if (customNotes) {
+        notes = notes ? notes + ' | ' + customNotes : customNotes;
+      }
 
       input.value = '';
-      addLog('疑義照会' + (patientNum ? ' (患者番号: ' + patientNum + ')' : ' (番号なし)'));
+      notesInput.value = '';
+      addLog('疑義照会' + (notes ? ' (' + notes + ')' : ' (番号なし)'));
       recordToSheet('疑義照会', notes);
     }
 

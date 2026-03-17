@@ -122,6 +122,25 @@ class EventProcessor:
             print(f"⌨ Patient number entered: {patient_number or '(空)'}")
             self._record_and_transition(GIGI_SHOUKAI, notes=notes)
 
+    def submit_patient_number_with_notes(self, patient_number: str, notes: str = ""):
+        """Called by UI after patient number and notes are entered (for 疑義照会).
+        Combines patient_number with custom notes."""
+        with self._state_lock:
+            self._needs_patient_number = False
+
+            if self._state != State.WAITING_PATIENT_NUM:
+                return  # State changed (e.g. card removed), ignore
+
+            # 患者番号と備考を組み合わせる
+            combined_notes = ""
+            if patient_number:
+                combined_notes = f"患者番号: {patient_number}"
+            if notes:
+                combined_notes = combined_notes + " | " + notes if combined_notes else notes
+
+            print(f"⌨ 疑義照会 (患者番号: {patient_number or '(空)'}, 備考: {notes or '(なし)'})")
+            self._record_and_transition(GIGI_SHOUKAI, notes=combined_notes)
+
     def _on_card_placed(self, uid: str):
         """Called when a card is placed on the reader (once per placement)."""
         with self._state_lock:
